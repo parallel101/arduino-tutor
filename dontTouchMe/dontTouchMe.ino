@@ -9,7 +9,7 @@ void setup() {
 void loop() {
   int enable = digitalRead(8);
   if (enable == 0) {
-    int hz = 800 + 500     * sin(millis() * 0.0005);
+    int hz = 800 + 500 * sin(millis() * 0.0005);
     // Serial.println(hz);
     int step = 1000000 / hz;
     digitalWrite(7, LOW);
