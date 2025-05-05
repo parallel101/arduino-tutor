@@ -111,17 +111,21 @@ void sendSegment(Segment const &segment) {
   }
 }
 
+float mmToStep(float mm) {
+  return mm / STEP_SIZE;
+}
+
 void setup() {
   Serial.begin(115200);
 
   segments[0].directions[0] = 1;
-  segments[0].steps[0] = 400;
+  segments[0].steps[0] = mmToStep(180);
   segments[0].directions[1] = 0;
-  segments[0].steps[1] = 4000;
-  segments[0].acceleration = 100000;
-  segments[0].initSpeedSqr = squaref(100);
-  segments[0].topSpeedSqr = squaref(5000);
-  segments[0].exitSpeedSqr = squaref(100);
+  segments[0].steps[1] = mmToStep(70);
+  segments[0].acceleration = mmToStep(8000);
+  segments[0].initSpeedSqr = squaref(mmToStep(5));
+  segments[0].topSpeedSqr = squaref(mmToStep(400));
+  segments[0].exitSpeedSqr = squaref(mmToStep(5));
 
   initMotors();
   enableMotors();
