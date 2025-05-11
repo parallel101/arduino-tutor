@@ -4,3 +4,4 @@
 .cache/
 build/
 compile_commands.json
+secrets.h
