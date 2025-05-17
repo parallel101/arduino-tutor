@@ -54,7 +54,6 @@ int32_t raw_samples[SAMPLE_BUFFER_SIZE];
 
 void loop()
 {
-    // read from the I2S device
     size_t bytes_read = 0;
     ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, raw_samples, sizeof(int32_t) * SAMPLE_BUFFER_SIZE, &bytes_read, portMAX_DELAY));
     size_t samples_read = bytes_read / sizeof(int32_t);
