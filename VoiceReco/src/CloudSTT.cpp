@@ -1,9 +1,19 @@
 #include <Arduino.h>
-#include <WiFi.h>
 #include <HTTPClient.h>
 #include "secrets.h"
 
-void setup() {
+static String get_access_token() {
+    static const char url[] = "http://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=" BAIDU_API_KEY "&client_secret=" BAIDU_SECRET_KEY;
+
+    HTTPClient http;
+    http.begin(url);
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+    http.POST("");
+    http.end();
+}
+
+void cloudSetup() {
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);
 
@@ -28,18 +38,18 @@ void setup() {
     }
 }
 
-void loop() {
-    while (WiFi.status() != WL_CONNECTED) {
-        bool led = false;
-        digitalWrite(LED_BUILTIN, LOW);
-        WiFi.reconnect();
-        Serial.println("WiFi disconnected, reconnecting...");
-        while (WiFi.status() != WL_CONNECTED) {
-            digitalWrite(LED_BUILTIN, led = !led);
-            delay(200);
-        }
-        digitalWrite(LED_BUILTIN, HIGH);
-    }
+void cloudLoop() {
+    // while (WiFi.status() != WL_CONNECTED) {
+    //     bool led = false;
+    //     digitalWrite(LED_BUILTIN, LOW);
+    //     WiFi.reconnect();
+    //     Serial.println("WiFi disconnected, reconnecting...");
+    //     while (WiFi.status() != WL_CONNECTED) {
+    //         digitalWrite(LED_BUILTIN, led = !led);
+    //         delay(200);
+    //     }
+    //     digitalWrite(LED_BUILTIN, HIGH);
+    // }
 
     String url = "http://web.simmons.edu/";
     // }
