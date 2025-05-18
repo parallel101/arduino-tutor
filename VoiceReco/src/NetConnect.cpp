@@ -2,15 +2,15 @@
 #include <WiFi.h>
 #include "secrets.h"
 
-void cloudSetup() {
-    pinMode(LED_BUILTIN, OUTPUT);
+void netSetup()
+{
     digitalWrite(LED_BUILTIN, LOW);
 
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
-    WiFi.setTxPower(WIFI_POWER_7dBm);
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
     bool led = false;
     while (true) {
         wl_status_t status = WiFi.status();
@@ -27,7 +27,8 @@ void cloudSetup() {
     }
 }
 
-void cloudLoop() {
+void netLoop()
+{
     while (WiFi.status() != WL_CONNECTED) {
         bool led = false;
         digitalWrite(LED_BUILTIN, LOW);
@@ -39,4 +40,5 @@ void cloudLoop() {
         }
         digitalWrite(LED_BUILTIN, HIGH);
     }
+    delay(1000);
 }

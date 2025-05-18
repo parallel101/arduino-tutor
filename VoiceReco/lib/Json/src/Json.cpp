@@ -1526,7 +1526,7 @@ JsonArray::JsonArray(const String &str) : v(std::vector<Element>()) {
 JsonArray::JsonArray(const JsonArray &other) : v(other.v) {}
 
 JsonArray::JsonArray(std::vector<int> &arr) : v(std::vector<Element>()) {
-    for (int i : arr) push(i);
+    for (int i : arr) push(Element(int32_t(i)));
 }
 
 JsonArray &JsonArray::push(const Element &value) {
