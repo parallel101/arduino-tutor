@@ -24,7 +24,7 @@ void setup()
 static int positiveCount = 0;
 static int negativeCount = 0;
 
-static const float THRESHOLD_DB = -52.0f;
+static const float THRESHOLD_DB = -55.0f;
 static const int MAX_NEGATIVE_COUNT = 5;
 static const int MIN_POSITIVE_COUNT = 3;
 
@@ -48,6 +48,8 @@ void loop()
                 negativeCount = 0;
                 positiveCount = 0;
             }
+        } else {
+            voiceClearAudioBuffer();
         }
     } else {
         negativeCount = 0;

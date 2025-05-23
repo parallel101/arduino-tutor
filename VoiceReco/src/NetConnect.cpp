@@ -10,7 +10,7 @@ void netSetup()
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    WiFi.setTxPower(WIFI_POWER_7dBm);
     bool led = false;
     while (true) {
         wl_status_t status = WiFi.status();
