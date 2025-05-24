@@ -1,10 +1,11 @@
 #include <Arduino.h>
 #include <esp_system.h>
 #include <driver/i2s.h>
+#include <cstring>
 
 #define SAMPLE_RATE 16000
-#define SAMPLE_BUFFER_SIZE (SAMPLE_RATE * 5)
 #define SAMPLE_CHUNK_SIZE 1024
+#define SAMPLE_BUFFER_SIZE (78 * SAMPLE_CHUNK_SIZE)
 #define I2S_SERIAL_CLOCK 3
 #define I2S_LEFT_RIGHT_CLOCK 2
 #define I2S_MIC_SERIAL_DATA 4
@@ -108,6 +109,7 @@ size_t voiceGetAudioMaxSize()
 void voiceClearAudioBuffer(size_t min_size)
 {
     if (current_sample > min_size) {
+        memmove(sample_buffer, sample_buffer + current_sample - min_size, min_size);
         current_sample = min_size;
     }
 }
@@ -128,6 +130,11 @@ size_t voicePlayAudio()
     ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, sample_buffer, current_sample * sizeof(int16_t), &bytes_written, portMAX_DELAY));
     digitalWrite(I2S_SPEAKER_ENABLE, LOW);
     return bytes_written;
+}
+
+bool voiceBufferFull()
+{
+    return current_sample == SAMPLE_BUFFER_SIZE;
 }
 
 size_t voiceReadChunk()

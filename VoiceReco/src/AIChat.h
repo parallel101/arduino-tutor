@@ -17,10 +17,11 @@ struct Message
 
 struct AIOptions
 {
-    const char *model = "qianfan-agent-intent-32k";
-    float temperature = 0;
-    int32_t seed = 0;
-    int32_t max_tokens = 64;
+    // const char *model = "qianfan-agent-intent-32k";
+    const char *model = "ernie-4.5-turbo-32k";
+    float temperature = 0.1;
+    int32_t seed = -1;
+    int32_t max_tokens = 80;
 };
 
 String aiChat(String const &prompt, AIOptions const &options = {});

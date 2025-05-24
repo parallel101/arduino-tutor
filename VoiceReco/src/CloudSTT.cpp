@@ -108,7 +108,7 @@ static String url_encode(String const &text)
     return res;
 }
 
-static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, String const &text, String const &options)
+static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, void (*callback)(size_t bytes_read), String const &text, String const &options)
 {
     String url = "http://tsn.baidu.com/text2audio?tex=" + url_encode(text) + options + "&aue=4&lan=zh&ctp=1&audio_ctrl={\"sampling_rate\":16000}&cuid=" BAIDU_CUID "&tok=" + token;
 
@@ -131,27 +131,38 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, St
     }
     String content_type = http.header("Content-Type");
     if (content_type == "audio/basic;codec=pcm;rate=16000;channel=1") {
-        BufferStream stream(buffer, size);
-        stream.reserve(http.getSize());
-        http.writeToStream(&stream);
-        http.end();
-        if (stream.isEmpty()) {
+        WiFiClient &stream = http.getStream();
+        size_t content_length = http.getSize();
+        uint8_t *buf_write_ptr = buffer;
+        uint8_t *buf_end_ptr = buffer + size;
+        if (content_length == 0) {
             report_error("body is empty");
             return {};
         }
-        return stream.size();
-
-    } else if (content_type == "audio/wav") {
-        BufferStream stream(buffer, size);
-        stream.reserve(http.getSize());
-        http.writeToStream(&stream);
-        http.end();
-        if (stream.isEmpty()) {
-            report_error("body is empty");
-            return {};
+        if (content_length == -1) {
+            report_error("cannot determine body size");
         }
-        memset(buffer, 0, 0x2a);
-        return stream.size();
+        while (content_length) {
+            while (buf_write_ptr != buf_end_ptr && content_length) {
+                size_t want_read = std::min<size_t>(buf_end_ptr - buf_write_ptr, content_length);
+                // size_t bytes_read = stream.readBytes(buf_write_ptr, want_read);
+                int bytes_read = stream.read(buf_write_ptr, want_read);
+                if (bytes_read <= 0) {
+                    delay(RETRY_DELAY);
+                    bytes_read = stream.readBytes(buf_write_ptr, want_read);
+                    if (bytes_read <= 0) {
+                        break;
+                    }
+                }
+                content_length -= bytes_read;
+                buf_write_ptr += bytes_read;
+            }
+            callback(buf_write_ptr - buffer);
+            buf_write_ptr = buffer;
+        }
+        content_length = http.getSize();
+        http.end();
+        return content_length;
 
     } else if (content_type == "application/json") {
         String body = http.getString();
@@ -189,7 +200,7 @@ String cloudQuery(uint8_t *audio, size_t size)
     return speech_reco(token, audio, size);
 }
 
-size_t cloudSynth(uint8_t *buffer, size_t size, String const &text, String const &options)
+size_t cloudSynth(uint8_t *buffer, size_t size, void (*callback)(size_t bytes_read), String const &text, String const &options)
 {
-    return speech_synth(token, buffer, size, text, options);
+    return speech_synth(token, buffer, size, callback, text, options);
 }

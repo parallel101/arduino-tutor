@@ -10,7 +10,7 @@
 #define MODEL_NAME "ernie-4.5-turbo-32k"
 static const char SYSTEM_INSTRUCTION[] =
 R"(你是一个家庭语音助手，昵称小智。
-你的职责是帮助用户解决生活问题，你可以操控用户家中的电器设备，解决用户需求。
+你的职责是帮助用户解决生活问题，可以操控用户家中的电器设备，解决用户需求。
 
 你的输出严格遵守以下规则：
 1. 你的输入来自用户的语音，由于语音识别的局限，输入文本可能存在错别字，请在心里自行纠正，不必告诉用户。
@@ -102,8 +102,8 @@ String aiChat(Message *messages, size_t num_messages, AIOptions const &options)
             delay(RETRY_DELAY);
         }
         if (code != 200) {
+            report_error(http.getString());
             http.end();
-            report_error(code);
             return "";
         }
     }
@@ -114,13 +114,11 @@ String aiChat(Message *messages, size_t num_messages, AIOptions const &options)
 
     JsonDocument doc;
     deserializeJson(doc, body);
-    Serial.println("Deserialized!");
     if (doc["choices"].isNull()) {
         report_error(body);
         return "";
     }
 
-    Serial.println("Choiced!");
     JsonObject response = doc["choices"][0]["message"];
     if (response["role"] != "assistant") {
         report_error(body);
@@ -131,7 +129,6 @@ String aiChat(Message *messages, size_t num_messages, AIOptions const &options)
         return "";
     }
 
-    Serial.println("Contented!");
     Serial.println(response["content"].as<String>());
     return response["content"];
 }

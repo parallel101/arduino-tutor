@@ -5,6 +5,7 @@
 void voiceSetup();
 size_t voiceReadChunk();
 float voiceRMSdB();
+bool voiceBufferFull();
 uint8_t *voiceGetAudioBuffer();
 size_t voiceGetAudioSize();
 void voiceSetAudioSize(size_t size);
