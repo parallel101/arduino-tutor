@@ -27,18 +27,18 @@ void netSetup()
     }
 }
 
-void netLoop()
-{
-    while (WiFi.status() != WL_CONNECTED) {
-        bool led = false;
-        digitalWrite(LED_BUILTIN, LOW);
-        Serial.println("WiFi disconnected, reconnecting...");
-        WiFi.reconnect();
-        while (WiFi.status() != WL_CONNECTED) {
-            digitalWrite(LED_BUILTIN, led = !led);
-            delay(200);
-        }
-        digitalWrite(LED_BUILTIN, HIGH);
-    }
-    delay(1000);
-}
+// void netLoop()
+// {
+//     while (WiFi.status() != WL_CONNECTED) {
+//         bool led = false;
+//         digitalWrite(LED_BUILTIN, LOW);
+//         Serial.println("WiFi disconnected, reconnecting...");
+//         WiFi.reconnect();
+//         while (WiFi.status() != WL_CONNECTED) {
+//             digitalWrite(LED_BUILTIN, led = !led);
+//             delay(200);
+//         }
+//         digitalWrite(LED_BUILTIN, HIGH);
+//     }
+//     delay(1000);
+// }
