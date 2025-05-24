@@ -35,6 +35,10 @@ static void recognize_voice()
     Serial.printf("Prompt [%s]\n", prompt.c_str());
 
     String answer = aiChat(prompt);
+    if (answer.isEmpty()) {
+        Serial.printf("No answer generated.\n");
+        return;
+    }
     Serial.printf("Answer [%s]\n", answer.c_str());
 
     String options = "";

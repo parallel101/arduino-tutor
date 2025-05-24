@@ -1,7 +1,7 @@
 #include "CloudSTT.h"
 #include <Arduino.h>
 #include <HTTPClient.h>
-#include <Json.h>
+#include <ArduinoJson.h>
 #include <cstring>
 #include "BufferStream.h"
 #include "secrets.h"
@@ -33,13 +33,14 @@ static String get_access_token()
     }
     String body = http.getString();
     http.end();
-    Json json(body);
-    int errNo = json.getElement("err_no").toInt();
+    JsonDocument doc;
+    deserializeJson(doc, body);
+    int errNo = doc["err_no"];
     if (errNo != 0) {
-        report_error(json.getElement("err_msg"));
+        report_error(doc["err_msg"].as<String>());
         return "";
     }
-    return json.getElement("access_token");
+    return doc["access_token"];
 }
 
 static String speech_reco(String const &token, uint8_t *audio, size_t size)
@@ -65,13 +66,14 @@ static String speech_reco(String const &token, uint8_t *audio, size_t size)
     }
     String body = http.getString();
     http.end();
-    Json json(body);
-    int errNo = json.getElement("err_no").toInt();
+    JsonDocument doc;
+    deserializeJson(doc, body);
+    int errNo = doc["err_no"];
     if (errNo != 0) {
-        report_error(json.getElement("err_msg"));
+        report_error(doc["err_msg"].as<String>());
         return "";
     }
-    return json.getElement("result").toArray().getElement(0).toString();
+    return doc["result"][0];
 }
 
 static bool is_char_url_safe(char c) {
@@ -154,8 +156,9 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, St
     } else if (content_type == "application/json") {
         String body = http.getString();
         http.end();
-        Json json(body);
-        report_error(json.getElement("err_msg"));
+        JsonDocument doc;
+        deserializeJson(doc, body);
+        report_error(doc["err_msg"].as<String>());
         return 0;
 
     } else {

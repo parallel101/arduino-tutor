@@ -1,5 +1,5 @@
 #include "AIChat.h"
-#include <Json.h>
+#include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <Arduino.h>
 #include "secrets.h"
@@ -14,15 +14,16 @@ R"(你是一个家庭语音助手，昵称小智。
 
 你的输出严格遵守以下规则：
 1. 你的输入来自用户的语音，由于语音识别的局限，输入文本可能存在错别字，请在心里自行纠正，不必告诉用户。
-2. 你的输出将被合成为语音，然后通过扬声器朗读播报。
+2. 你的输出将被合成为语音后通过扬声器朗读播报。
 3. 你的输出文本必须符合口语的用于习惯。
 4. 确保你输出的每个字符，都能被语音合成引擎朗读出来，不要包含任何无法朗读的东西。
 5. 不要包含 Markdown 助记符，不要包含程序代码，不要包含 Emoji，但可以包含标点符号。
-6. 用中文回答，不超过 60 字。
+6. 回答不得超过 50 字。
 7. 确保回答简短，直达主题，快速解决用户问题，避免废话。
 8. 如果用户请求进行某种操作，请通过 Tool Call 对物联网设备进行操作，解决用户的需求。
 9. 如有必要，可以在 Tool Call 后配上简短的语音提示，不超过 10 个字。
-10. 由于内存限制，你没有历史对话记忆。你需要在一轮对话中解决问题，不会有第二轮对话；因此，涉及设备操作时，不用询问用户确认，直接执行 Tool Call 即可。
+10. 由于内存限制，你没有历史对话记忆。你需要在一轮对话中解决问题，不会有第二轮对话。
+11. 涉及设备操作时，不用询问用户确认，直接执行 Tool Call 即可。
 
 用户偏好设置：
 1. 用户昵称：小彭老师
@@ -35,8 +36,7 @@ R"(你是一个家庭语音助手，昵称小智。
 User: 什么是电灯？
 Assistant: 就是一种用电来照亮你房间的电器啦！
 User: 打开电灯。
-Assistant: （使用 Tool Call 打开电灯）已为您打开电灯。
-)";
+Assistant: （使用 Tool Call 打开电灯）已为您打开电灯。)";
 
 static const char *roleName(Role role) {
     switch (role) {
@@ -48,6 +48,8 @@ static const char *roleName(Role role) {
             return "assistant";
         case Role::Tool:
             return "tool";
+        default:
+            return "";
     }
 }
 
@@ -63,35 +65,37 @@ String aiChat(String const &prompt, AIOptions const &options)
 
 String aiChat(Message *messages, size_t num_messages, AIOptions const &options)
 {
-    static const char url[] = "https://qianfan.baidubce.com/v2/chat/completions";
+    static const char url[] = "http://qianfan.baidubce.com/v2/chat/completions";
     HTTPClient http;
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", "Bearer " BAIDU_BCE_API_KEY);
-    http.addHeader("appid", BAIDU_BCE_APP_ID);
-
-    JsonArray messagesJson;
-    for (Message *message = messages; message != messages + num_messages; ++message) {
-        Json messageJson;
-        messageJson.add("role", roleName(message->role));
-        messageJson.add("content", message->content);
-        messagesJson.push(messageJson);
-    }
 
     {
-        Json json;
-        json.add("model", options.model);
-        json.add("temperature", options.temperature);
+        JsonDocument doc;
+        for (size_t i = 0; i != num_messages; ++i) {
+            doc["messages"][i]["role"] = roleName(messages[i].role);
+            doc["messages"][i]["content"] = messages[i].content;
+        }
+
+        doc["model"] = options.model;
+        doc["stream"] = false;
+        doc["user_id"] = BAIDU_CUID;
+        doc["temperature"] = options.temperature;
         if (options.seed != -1) {
-            json.add("seed", options.seed);
+            doc["seed"] = options.seed;
         }
         if (options.max_tokens != -1) {
-            json.add("seed", options.max_tokens);
+            doc["max_tokens"] = options.max_tokens;
         }
-        json.add("messages", messagesJson);
+
+        String jsonStr;
+        serializeJson(doc, jsonStr);
+        Serial.println(jsonStr);
+
         int code;
         for (int tries = 0; tries != MAX_RETRIES; ++tries) {
-            code = http.POST(json.toString());
+            code = http.POST(jsonStr);
             if (code >= 0) {
                 break;
             }
@@ -104,21 +108,30 @@ String aiChat(Message *messages, size_t num_messages, AIOptions const &options)
         }
     }
 
-    Json json(http.getString());
-    if (!json.contains("choices")) {
-        report_error(json.toString());
+    String body = http.getString();
+    http.end();
+    Serial.println(body);
+
+    JsonDocument doc;
+    deserializeJson(doc, body);
+    Serial.println("Deserialized!");
+    if (doc["choices"].isNull()) {
+        report_error(body);
         return "";
     }
 
-    auto response = json.getElement("choices").toArray()[0].toJson().getElement("message").toJson();
-    if (response.getElement("role").toString() != "assistant") {
-        report_error(response.toString());
+    Serial.println("Choiced!");
+    JsonObject response = doc["choices"][0]["message"];
+    if (response["role"] != "assistant") {
+        report_error(body);
         return "";
     }
-    if (response.contains("tool_calls")) {
+    if (!response["tool_calls"].isNull()) {
         report_error("tool calls not supported yet");
         return "";
     }
 
-    return response.getElement("content").toString();
+    Serial.println("Contented!");
+    Serial.println(response["content"].as<String>());
+    return response["content"];
 }
