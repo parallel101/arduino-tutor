@@ -60,6 +60,17 @@ void voiceSetup()
     ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2s_mic_config, 0, NULL));
     ESP_ERROR_CHECK(i2s_set_pin(I2S_NUM_0, &i2s_mic_pins));
 
+    if (psramFound()) {
+        digitalWrite(LED_BUILTIN, LOW);
+        delay(1000);
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(1000);
+        sample_buffer = (int16_t *)ps_malloc(SAMPLE_BUFFER_SIZE * sizeof(int16_t));
+        if (sample_buffer) {
+            digitalWrite(LED_BUILTIN, LOW);
+        }
+        abort();
+    }
     sample_buffer = (int16_t *)heap_caps_malloc(SAMPLE_BUFFER_SIZE * sizeof(int16_t), MALLOC_CAP_32BIT | MALLOC_CAP_DMA);
     if (!sample_buffer) {
         abort();
@@ -94,9 +105,20 @@ size_t voiceGetAudioMaxSize()
     return SAMPLE_BUFFER_SIZE * sizeof(int16_t);
 }
 
-void voiceClearAudioBuffer()
+void voiceClearAudioBuffer(size_t min_size)
 {
-    current_sample = 0;
+    if (current_sample > min_size) {
+        current_sample = min_size;
+    }
+}
+
+void voiceDecVolume(uint8_t dec)
+{
+    if (dec != 0) {
+        for (size_t i = 0; i != current_sample; ++i) {
+            sample_buffer[i] >>= dec;
+        }
+    }
 }
 
 size_t voicePlayAudio()
@@ -108,13 +130,13 @@ size_t voicePlayAudio()
     return bytes_written;
 }
 
-bool voiceReadChunk()
+size_t voiceReadChunk()
 {
     size_t bytes_read = 0;
     size_t readable_samples = std::min<size_t>(SAMPLE_CHUNK_SIZE, SAMPLE_BUFFER_SIZE - current_sample);
     if (readable_samples == 0) {
         rms_db = -99.0f;
-        return false;
+        return 0;
     }
     ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, sample_buffer + current_sample, readable_samples * sizeof(int16_t), &bytes_read, portMAX_DELAY));
     size_t samples_read = bytes_read / sizeof(int16_t);
@@ -131,5 +153,5 @@ bool voiceReadChunk()
     rms_db = 20.0f * log10f(rms_samples);
     // Serial.printf("%f dB\n", rms_db);
     // Serial.printf("%d\n", current_sample);
-    return true;
+    return samples_read;
 }

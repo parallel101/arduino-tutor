@@ -24,4 +24,6 @@ public:
     size_t size() const { return m_write_ptr - m_buffer; }
     bool isEmpty() const { return m_write_ptr == m_buffer; }
     size_t capacity() const { return m_end_ptr - m_buffer; }
+
+    void reserve(size_t capacity) { (void)capacity; }
 };

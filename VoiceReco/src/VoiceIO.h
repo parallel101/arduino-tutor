@@ -3,11 +3,12 @@
 #include <Arduino.h>
 
 void voiceSetup();
-bool voiceReadChunk();
+size_t voiceReadChunk();
 float voiceRMSdB();
 uint8_t *voiceGetAudioBuffer();
 size_t voiceGetAudioSize();
 void voiceSetAudioSize(size_t size);
 size_t voiceGetAudioMaxSize();
-void voiceClearAudioBuffer();
+void voiceClearAudioBuffer(size_t min_size = 0);
+void voiceDecVolume(uint8_t dec);
 size_t voicePlayAudio();

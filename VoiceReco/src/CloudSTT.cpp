@@ -2,30 +2,30 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <Json.h>
+#include <cstring>
 #include "BufferStream.h"
 #include "secrets.h"
+#include "report_error.h"
 
-template <class T>
-static void report_error(T const &value, const char *file, int line)
-{
-    Serial.printf("(%s:%d) Error: ", file, line);
-    Serial.println(value);
-}
-
-#define report_error(...) report_error(__VA_ARGS__, __FILE__, __LINE__)
+#define MAX_RETRIES 5
+#define RETRY_DELAY 100
 
 static String get_access_token()
 {
-    static const char url[] = "http://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=" BAIDU_API_KEY "&client_secret=" BAIDU_SECRET_KEY;
+    static const char url[] = "http://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=" BAIDU_VOP_API_KEY "&client_secret=" BAIDU_VOP_SECRET_KEY;
 
     HTTPClient http;
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Accept", "application/json");
     int code;
-    do {
-        code = http.POST("");
-    } while (code < 0);
+    for (int tries = 0; tries != MAX_RETRIES; ++tries) {
+        code = http.POST({});
+        if (code >= 0) {
+            break;
+        }
+        delay(RETRY_DELAY);
+    }
     if (code != 200) {
         http.end();
         report_error(code);
@@ -51,9 +51,13 @@ static String speech_reco(String const &token, uint8_t *audio, size_t size)
     http.begin(url);
     http.addHeader("Content-Type", "audio/pcm;rate=16000");
     int code;
-    do {
+    for (int tries = 0; tries != MAX_RETRIES; ++tries) {
         code = http.POST(audio, size);
-    } while (code < 0);
+        if (code >= 0) {
+            break;
+        }
+        delay(RETRY_DELAY);
+    }
     if (code != 200) {
         http.end();
         report_error(code);
@@ -109,11 +113,15 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, St
     HTTPClient http;
     http.begin(url);
     static const char *collect_headers[] = {"Content-Type"};
-    http.collectHeaders(collect_headers, sizeof(collect_headers) / sizeof(collect_headers[0]));
+    http.collectHeaders(collect_headers, sizeof collect_headers / sizeof collect_headers[0]);
     int code;
-    do {
+    for (int tries = 0; tries != MAX_RETRIES; ++tries) {
         code = http.GET();
-    } while (code < 0);
+        if (code >= 0) {
+            break;
+        }
+        delay(RETRY_DELAY);
+    }
     if (code != 200) {
         http.end();
         report_error(code);
@@ -122,7 +130,7 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, St
     String content_type = http.header("Content-Type");
     if (content_type == "audio/basic;codec=pcm;rate=16000;channel=1") {
         BufferStream stream(buffer, size);
-        // stream.reserve(http.getSize());
+        stream.reserve(http.getSize());
         http.writeToStream(&stream);
         http.end();
         if (stream.isEmpty()) {
@@ -131,16 +139,17 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, St
         }
         return stream.size();
 
-    // } else if (content_type == "audio/wav") {
-    //     StreamString stream;
-    //     stream.reserve(http.getSize());
-    //     http.writeToStream(&stream);
-    //     http.end();
-    //     if (stream.available() <= 0x2a) {
-    //         report_error("body too short");
-    //         return {};
-    //     }
-    //     return stream.substring(0x2a);
+    } else if (content_type == "audio/wav") {
+        BufferStream stream(buffer, size);
+        stream.reserve(http.getSize());
+        http.writeToStream(&stream);
+        http.end();
+        if (stream.isEmpty()) {
+            report_error("body is empty");
+            return {};
+        }
+        memset(buffer, 0, 0x2a);
+        return stream.size();
 
     } else if (content_type == "application/json") {
         String body = http.getString();
@@ -148,6 +157,7 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, St
         Json json(body);
         report_error(json.getElement("err_msg"));
         return 0;
+
     } else {
         report_error(content_type);
         http.end();
@@ -159,9 +169,16 @@ static String token;
 
 void cloudSetup()
 {
-    do {
+    for (int tries = 0; tries != MAX_RETRIES; ++tries) {
         token = get_access_token();
-    } while (token.isEmpty());
+        if (!token.isEmpty()) {
+            break;
+        }
+        delay(RETRY_DELAY);
+    }
+    if (token.isEmpty()) {
+        report_error("failed to get access token");
+    }
 }
 
 String cloudQuery(uint8_t *audio, size_t size)
