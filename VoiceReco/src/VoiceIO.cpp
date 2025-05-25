@@ -61,18 +61,11 @@ void voiceSetup()
     ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2s_mic_config, 0, NULL));
     ESP_ERROR_CHECK(i2s_set_pin(I2S_NUM_0, &i2s_mic_pins));
 
-    if (psramFound()) {
-        digitalWrite(LED_BUILTIN, LOW);
-        delay(1000);
-        digitalWrite(LED_BUILTIN, HIGH);
-        delay(1000);
-        sample_buffer = (int16_t *)ps_malloc(SAMPLE_BUFFER_SIZE * sizeof(int16_t));
-        if (sample_buffer) {
-            digitalWrite(LED_BUILTIN, LOW);
-        }
-        abort();
-    }
+#if BOARD_HAS_PSRAM
+    sample_buffer = (int16_t *)ps_malloc(SAMPLE_BUFFER_SIZE * sizeof(int16_t));
+#else
     sample_buffer = (int16_t *)heap_caps_malloc(SAMPLE_BUFFER_SIZE * sizeof(int16_t), MALLOC_CAP_32BIT | MALLOC_CAP_DMA);
+#endif
     if (!sample_buffer) {
         abort();
     }

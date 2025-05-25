@@ -20,7 +20,7 @@ static int negativeCount = 0;
 static const float START_THRESHOLD_DB = -53.0f;
 static const float THRESHOLD_DB = -61.0f;
 static const int MAX_NEGATIVE_COUNT = 7 * 1024;
-static const int MIN_POSITIVE_COUNT = 3 * 1024;
+static const int MIN_POSITIVE_COUNT = 4 * 1024;
 static const int MAX_PRELOGUE_COUNT = 6 * 1024;
 
 static void voice_play_callback(size_t audio_bytes)
@@ -63,6 +63,7 @@ static void recognize_voice()
     try_fix_prompt(prompt);
     if (prompt.isEmpty()) {
         Serial.printf("No prompt detected.\n");
+        digitalWrite(LED_BUILTIN, HIGH);
         return;
     }
     Serial.printf("Prompt [%s]\n", prompt.c_str());
@@ -94,11 +95,13 @@ void loop()
     float rms_db = voiceRMSdB();
     Serial.printf("%f dB\n", rms_db);
     if (voiceBufferFull()) {
+        digitalWrite(LED_BUILTIN, HIGH);
         Serial.printf("Voice too long.\n");
         voiceClearAudioBuffer();
         negativeCount = 0;
         positiveCount = 0;
     } else if (rms_db <= (positiveCount > 0 ? THRESHOLD_DB : START_THRESHOLD_DB)) {
+        digitalWrite(LED_BUILTIN, HIGH);
         if (positiveCount > 0) {
             negativeCount += bytes_read;
             if (negativeCount >= MAX_NEGATIVE_COUNT) {
@@ -114,6 +117,7 @@ void loop()
             voiceClearAudioBuffer(MAX_PRELOGUE_COUNT);
         }
     } else {
+        digitalWrite(LED_BUILTIN, LOW);
         negativeCount = 0;
         positiveCount += bytes_read;
     }
