@@ -2,6 +2,8 @@
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <Arduino.h>
+#include "CACert.h"
+#include "GlobalHTTP.h"
 #include "secrets.h"
 #include "report_error.h"
 
@@ -65,9 +67,8 @@ String aiChat(String const &prompt, AIOptions const &options)
 
 String aiChat(Message *messages, size_t num_messages, AIOptions const &options)
 {
-    static const char url[] = "http://qianfan.baidubce.com/v2/chat/completions";
-    HTTPClient http;
-    http.begin(url);
+    static const char url[] = "https://qianfan.baidubce.com/v2/chat/completions";
+    http.begin(url, certBaiduCom);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", "Bearer " BAIDU_BCE_API_KEY);
 

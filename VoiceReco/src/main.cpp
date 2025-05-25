@@ -20,8 +20,8 @@ static int negativeCount = 0;
 static const float START_THRESHOLD_DB = -53.0f;
 static const float THRESHOLD_DB = -61.0f;
 static const int MAX_NEGATIVE_COUNT = 7 * 1024;
-static const int MIN_POSITIVE_COUNT = 4 * 1024;
-static const int MAX_PRELOGUE_COUNT = 6 * 1024;
+static const int MIN_POSITIVE_COUNT = 5 * 1024;
+static const int MAX_PRELOGUE_COUNT = 7 * 1024;
 
 static void voice_play_callback(size_t audio_bytes)
 {
@@ -78,7 +78,7 @@ static void recognize_voice()
     Serial.printf("Answer [%s]\n", answer.c_str());
     digitalWrite(LED_BUILTIN, LOW);
 
-    String options = "";
+    String options = "&spd=5";
     size_t audio_bytes = cloudSynth(
         voiceGetAudioBuffer(), voiceGetAudioMaxSize(),
         voice_play_callback, answer, options);

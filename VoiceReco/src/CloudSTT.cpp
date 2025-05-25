@@ -3,7 +3,8 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <cstring>
-#include "BufferStream.h"
+#include "CACert.h"
+#include "GlobalHTTP.h"
 #include "secrets.h"
 #include "report_error.h"
 
@@ -12,10 +13,9 @@
 
 static String get_access_token()
 {
-    static const char url[] = "http://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=" BAIDU_VOP_API_KEY "&client_secret=" BAIDU_VOP_SECRET_KEY;
+    static const char url[] = "https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=" BAIDU_VOP_API_KEY "&client_secret=" BAIDU_VOP_SECRET_KEY;
 
-    HTTPClient http;
-    http.begin(url);
+    http.begin(url, certBaiduCom);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Accept", "application/json");
     int code;
@@ -45,11 +45,10 @@ static String get_access_token()
 
 static String speech_reco(String const &token, uint8_t *audio, size_t size)
 {
-    String url = "http://vop.baidu.com/server_api?dev_pid=1537&cuid=" BAIDU_CUID "&token=" + token;
+    String url = "https://vop.baidu.com/server_api?dev_pid=1537&cuid=" BAIDU_CUID "&token=" + token;
 ;
 
-    HTTPClient http;
-    http.begin(url);
+    http.begin(url, certBaiduCom);
     http.addHeader("Content-Type", "audio/pcm;rate=16000");
     int code;
     for (int tries = 0; tries != MAX_RETRIES; ++tries) {
@@ -110,10 +109,9 @@ static String url_encode(String const &text)
 
 static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, void (*callback)(size_t bytes_read), String const &text, String const &options)
 {
-    String url = "http://tsn.baidu.com/text2audio?tex=" + url_encode(text) + options + "&aue=4&lan=zh&ctp=1&audio_ctrl={\"sampling_rate\":16000}&cuid=" BAIDU_CUID "&tok=" + token;
+    String url = "https://tsn.baidu.com/text2audio?tex=" + url_encode(text) + "&aue=4&lan=zh&ctp=1" + options + "&audio_ctrl={\"sampling_rate\":16000}&cuid=" BAIDU_CUID "&tok=" + token;
 
-    HTTPClient http;
-    http.begin(url);
+    http.begin(url, certBaiduCom);
     static const char *collect_headers[] = {"Content-Type"};
     http.collectHeaders(collect_headers, sizeof collect_headers / sizeof collect_headers[0]);
     int code;

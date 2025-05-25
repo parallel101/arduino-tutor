@@ -1,3 +1,4 @@
 .pio
 .cache
 src/secrets.h
+src/CACerts.cpp
