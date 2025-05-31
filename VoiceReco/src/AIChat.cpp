@@ -23,9 +23,8 @@ R"(你是一个家庭语音助手，昵称小智。
 6. 回答不得超过 50 字。
 7. 确保回答简短，直达主题，快速解决用户问题，避免废话。
 8. 如果用户请求进行某种操作，请通过 Tool Call 对物联网设备进行操作，解决用户的需求。
-9. 如有必要，可以在 Tool Call 后配上简短的语音提示，不超过 10 个字。
-10. 由于内存限制，你没有历史对话记忆。你需要在一轮对话中解决问题，不会有第二轮对话。
-11. 涉及设备操作时，不用询问用户确认，直接执行 Tool Call 即可。
+9. 由于内存限制，你没有历史对话记忆。你需要在一轮对话中解决问题，不会有第二轮对话。
+10. 涉及设备操作时，不用询问用户确认，直接执行 Tool Call 即可。
 
 用户偏好设置：
 1. 用户昵称：小彭老师
@@ -40,7 +39,8 @@ Assistant: 就是一种用电来照亮你房间的电器啦！
 User: 打开电灯。
 Assistant: （使用 Tool Call 打开电灯）已为您打开电灯。)";
 
-static const char *roleName(Role role) {
+static const char *roleName(Role role)
+{
     switch (role) {
         case Role::System:
             return "system";
@@ -53,6 +53,41 @@ static const char *roleName(Role role) {
         default:
             return "";
     }
+}
+
+struct Tool
+{
+    struct Parameter {
+        String name;
+        String descrption;
+        String type;
+    };
+
+    String name;
+    String descrption;
+    std::vector<Parameter> parameters;
+    std::function<JsonDocument(JsonObject const &)> callback;
+};
+
+static std::vector<Tool> tools;
+
+static JsonArray const &getAITools()
+{
+    static JsonArray toolsArr;
+    if (toolsArr.size() != tools.size()) {
+        toolsArr.clear();
+        for (int i = 0; i < tools.size(); ++i) {
+            toolsArr[i]["type"] = "function";
+            toolsArr[i]["function"]["name"] = tools[i].name;
+            toolsArr[i]["function"]["descrption"] = tools[i].descrption;
+            toolsArr[i]["function"]["parameters"]["type"] = "object";
+            for (int j = 0; j < tools[i].parameters.size(); ++j) {
+                toolsArr[i]["function"]["parameters"]["properties"][tools[i].parameters[j].name]["descrption"] = tools[i].parameters[j].descrption;
+                toolsArr[i]["function"]["parameters"]["properties"][tools[i].parameters[j].name]["type"] = tools[i].parameters[j].type;
+            }
+        }
+    }
+    return toolsArr;
 }
 
 String aiChat(String const &prompt, AIOptions const &options)
@@ -89,6 +124,8 @@ String aiChat(Message *messages, size_t num_messages, AIOptions const &options)
         if (options.max_tokens != -1) {
             doc["max_tokens"] = options.max_tokens;
         }
+        doc["tools"] = getAITools();
+        doc["tool_choice"] = "auto";
 
         String jsonStr;
         serializeJson(doc, jsonStr);

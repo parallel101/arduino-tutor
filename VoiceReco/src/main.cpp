@@ -3,6 +3,7 @@
 #include "CloudSTT.h"
 #include "VoiceIO.h"
 #include "AIChat.h"
+#include "Thermometer.h"
 
 void setup()
 {
@@ -12,6 +13,7 @@ void setup()
     netSetup();
     cloudSetup();
     voiceSetup();
+    thermoSetup();
 }
 
 static int positiveCount = 0;

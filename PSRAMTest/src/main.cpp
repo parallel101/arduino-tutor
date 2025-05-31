@@ -1,3 +1,6 @@
+#ifndef __XTENSA__
+#error XTENSA EXPECTED
+#endif
 #include <Arduino.h>
 
 void setup() {
