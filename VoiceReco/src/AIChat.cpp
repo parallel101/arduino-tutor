@@ -8,8 +8,8 @@
 #include "report_error.h"
 
 #define MAX_RETRIES 5
+#define MAX_TOOL_CALLS 3
 #define RETRY_DELAY 100
-#define MODEL_NAME "ernie-4.5-turbo-32k"
 static const char SYSTEM_INSTRUCTION[] =
 R"(你是一个家庭语音助手，昵称小智。
 你的职责是帮助用户解决生活问题，可以操控用户家中的电器设备，解决用户需求。
@@ -30,14 +30,7 @@ R"(你是一个家庭语音助手，昵称小智。
 1. 用户昵称：小彭老师
 2. 用户爱好：嵌入式编程
 3. 偏好对话风格：科技并且带着趣味
-4. 语音助手硬件：ESP32C3 微型开发板
-5. 已知物联网设备：暂无，需要用户购买
-
-对话案例：
-User: 什么是电灯？
-Assistant: 就是一种用电来照亮你房间的电器啦！
-User: 打开电灯。
-Assistant: （使用 Tool Call 打开电灯）已为您打开电灯。)";
+4. 语音助手硬件：ESP32C3 微型开发板)";
 
 static const char *roleName(Role role)
 {
@@ -55,118 +48,179 @@ static const char *roleName(Role role)
     }
 }
 
-struct Tool
-{
-    struct Parameter {
-        String name;
-        String descrption;
-        String type;
-    };
-
-    String name;
-    String descrption;
-    std::vector<Parameter> parameters;
-    std::function<JsonDocument(JsonObject const &)> callback;
-};
-
 static std::vector<Tool> tools;
 
-static JsonArray const &getAITools()
+void registerTool(Tool tool)
 {
-    static JsonArray toolsArr;
-    if (toolsArr.size() != tools.size()) {
-        toolsArr.clear();
-        for (int i = 0; i < tools.size(); ++i) {
-            toolsArr[i]["type"] = "function";
-            toolsArr[i]["function"]["name"] = tools[i].name;
-            toolsArr[i]["function"]["descrption"] = tools[i].descrption;
-            toolsArr[i]["function"]["parameters"]["type"] = "object";
-            for (int j = 0; j < tools[i].parameters.size(); ++j) {
-                toolsArr[i]["function"]["parameters"]["properties"][tools[i].parameters[j].name]["descrption"] = tools[i].parameters[j].descrption;
-                toolsArr[i]["function"]["parameters"]["properties"][tools[i].parameters[j].name]["type"] = tools[i].parameters[j].type;
-            }
+    tools.push_back(std::move(tool));
+}
+
+template <class Tools>
+static void getAITools(Tools toolsArr)
+{
+    for (int i = 0; i < tools.size(); ++i) {
+        toolsArr[i]["type"] = "function";
+        toolsArr[i]["function"]["name"] = tools[i].name;
+        toolsArr[i]["function"]["descrption"] = tools[i].descrption;
+        toolsArr[i]["function"]["parameters"]["type"] = "object";
+        for (int j = 0; j < tools[i].parameters.size(); ++j) {
+            toolsArr[i]["function"]["parameters"]["properties"][tools[i].parameters[j].name]["descrption"] = tools[i].parameters[j].descrption;
+            toolsArr[i]["function"]["parameters"]["properties"][tools[i].parameters[j].name]["type"] = tools[i].parameters[j].type;
         }
     }
-    return toolsArr;
+}
+
+std::vector<Message> messages;
+
+void aiChatReset()
+{
+    messages.push_back({
+        .role = Role::System,
+        .content = SYSTEM_INSTRUCTION,
+    });
+}
+
+static String aiChatComplete(AIOptions const &options)
+{
+    for (int ntc = 0; ntc < MAX_TOOL_CALLS; ++ntc) {
+        static const char url[] = "https://qianfan.baidubce.com/v2/chat/completions";
+        http.begin(url, certBaiduCom);
+        http.setTimeout(20 * 1000);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("Authorization", "Bearer " BAIDU_BCE_API_KEY);
+
+        {
+            JsonDocument doc;
+            for (size_t i = 0; i != messages.size(); ++i) {
+                doc["messages"][i]["role"] = roleName(messages[i].role);
+                doc["messages"][i]["content"] = messages[i].content;
+                if (!messages[i].reasoningContent.isEmpty()) {
+                    doc["messages"][i]["reasoning_content"] = messages[i].reasoningContent;
+                }
+                if (!messages[i].name.isEmpty()) {
+                    doc["messages"][i]["name"] = messages[i].name;
+                }
+                if (!messages[i].toolCallId.isEmpty()) {
+                    doc["messages"][i]["tool_call_id"] = messages[i].toolCallId;
+                }
+                if (!messages[i].toolCalls.empty()) {
+                    for (int j = 0; j < messages[i].toolCalls.size(); ++j) {
+                        doc["messages"][i]["tool_calls"][j]["id"] = messages[i].toolCalls[j].id;
+                        doc["messages"][i]["tool_calls"][j]["type"] = "function";
+                        doc["messages"][i]["tool_calls"][j]["function"]["argments"] = messages[i].toolCalls[j].functionArgments;
+                        doc["messages"][i]["tool_calls"][j]["function"]["name"] = messages[i].toolCalls[j].functionName;
+                    }
+                }
+            }
+
+            doc["model"] = options.model;
+            doc["stream"] = false;
+            doc["user_id"] = BAIDU_CUID;
+            doc["temperature"] = options.temperature;
+            if (options.seed != -1) {
+                doc["seed"] = options.seed;
+            }
+            if (options.max_tokens != -1) {
+                doc["max_tokens"] = options.max_tokens;
+            }
+            getAITools(doc["tools"]);
+            doc["tool_choice"] = "auto";
+
+            String jsonStr;
+            serializeJson(doc, jsonStr);
+            Serial.println(jsonStr);
+
+            int code;
+            for (int tries = 0; tries != MAX_RETRIES; ++tries) {
+                code = http.POST(jsonStr);
+                if (code >= 0) {
+                    break;
+                }
+                delay(RETRY_DELAY);
+            }
+            if (code != 200) {
+                report_error(http.getString());
+                http.end();
+                return "";
+            }
+        }
+
+        String body = http.getString();
+        http.end();
+        Serial.println(body);
+
+        JsonDocument doc;
+        deserializeJson(doc, body);
+        if (doc["choices"].isNull()) {
+            report_error(body);
+            return "";
+        }
+
+        JsonObject response = doc["choices"][0]["message"];
+        if (response["role"] != "assistant") {
+            report_error(body);
+            return "";
+        }
+
+        Message assistantMessage = {
+            .role = Role::Assistant,
+            .content = response["content"],
+            .reasoningContent = response["reasoning_content"].isNull() ? String() : response["reasoning_content"],
+        };
+        for (int i = 0; i < response["tool_calls"].size(); ++i) {
+            assistantMessage.toolCalls.push_back({
+                .id = response["tool_calls"][i]["id"],
+                .functionName = response["tool_calls"][i]["function"]["name"],
+                .functionArgments = response["tool_calls"][i]["function"]["arguments"],
+            });
+        }
+        messages.push_back(std::move(assistantMessage));
+
+        if (!response["tool_calls"].isNull() && response["tool_calls"].size() > 0) {
+            std::vector<String> results;
+            for (int i = 0; i < response["tool_calls"].size(); ++i) {
+                String toolCallId = response["tool_calls"][i]["id"];
+                String functionName = response["tool_calls"][i]["function"]["name"];
+                String functionArgs = response["tool_calls"][i]["function"]["arguments"];
+                JsonDocument argsDoc;
+                deserializeJson(argsDoc, functionArgs);
+                int toolIndex = -1;
+                for (int j = 0; j < tools.size(); ++j) {
+                    if (functionName == tools[j].name) {
+                        toolIndex = j;
+                    }
+                }
+                String toolResponse;
+                if (toolIndex != -1) {
+                    toolResponse = tools[toolIndex].callback(argsDoc);
+                } else {
+                    toolResponse = R"({"error": "tool not found"})";
+                }
+                Serial.println(toolResponse);
+                messages.push_back({
+                    .role = Role::Tool,
+                    .content = std::move(toolResponse),
+                    .name = functionName,
+                    .toolCallId = toolCallId,
+                });
+            }
+            continue;
+        }
+
+        Serial.println(response["content"].as<String>());
+        return response["content"];
+    }
+    return "";
 }
 
 String aiChat(String const &prompt, AIOptions const &options)
 {
-    Message messages[2];
-    messages[0].role = Role::System;
-    messages[0].content = SYSTEM_INSTRUCTION;
-    messages[1].role = Role::User;
-    messages[1].content = prompt;
-    return aiChat(messages, sizeof messages / sizeof messages[0], options);
-}
-
-String aiChat(Message *messages, size_t num_messages, AIOptions const &options)
-{
-    static const char url[] = "https://qianfan.baidubce.com/v2/chat/completions";
-    http.begin(url, certBaiduCom);
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Authorization", "Bearer " BAIDU_BCE_API_KEY);
-
-    {
-        JsonDocument doc;
-        for (size_t i = 0; i != num_messages; ++i) {
-            doc["messages"][i]["role"] = roleName(messages[i].role);
-            doc["messages"][i]["content"] = messages[i].content;
-        }
-
-        doc["model"] = options.model;
-        doc["stream"] = false;
-        doc["user_id"] = BAIDU_CUID;
-        doc["temperature"] = options.temperature;
-        if (options.seed != -1) {
-            doc["seed"] = options.seed;
-        }
-        if (options.max_tokens != -1) {
-            doc["max_tokens"] = options.max_tokens;
-        }
-        doc["tools"] = getAITools();
-        doc["tool_choice"] = "auto";
-
-        String jsonStr;
-        serializeJson(doc, jsonStr);
-        Serial.println(jsonStr);
-
-        int code;
-        for (int tries = 0; tries != MAX_RETRIES; ++tries) {
-            code = http.POST(jsonStr);
-            if (code >= 0) {
-                break;
-            }
-            delay(RETRY_DELAY);
-        }
-        if (code != 200) {
-            report_error(http.getString());
-            http.end();
-            return "";
-        }
+    if (messages.empty()) {
+        aiChatReset();
     }
-
-    String body = http.getString();
-    http.end();
-    Serial.println(body);
-
-    JsonDocument doc;
-    deserializeJson(doc, body);
-    if (doc["choices"].isNull()) {
-        report_error(body);
-        return "";
-    }
-
-    JsonObject response = doc["choices"][0]["message"];
-    if (response["role"] != "assistant") {
-        report_error(body);
-        return "";
-    }
-    if (!response["tool_calls"].isNull()) {
-        report_error("tool calls not supported yet");
-        return "";
-    }
-
-    Serial.println(response["content"].as<String>());
-    return response["content"];
+    messages.push_back({
+        .role = Role::User,
+        .content = prompt,
+    });
+    return aiChatComplete(options);
 }

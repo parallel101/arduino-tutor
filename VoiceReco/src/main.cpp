@@ -14,6 +14,7 @@ void setup()
     cloudSetup();
     voiceSetup();
     thermoSetup();
+    aiChatReset();
 }
 
 static int positiveCount = 0;
@@ -71,6 +72,7 @@ static void recognize_voice()
     Serial.printf("Prompt [%s]\n", prompt.c_str());
 
     digitalWrite(LED_BUILTIN, HIGH);
+    aiChatReset();
     String answer = aiChat(prompt);
     try_fix_answer(answer);
     if (answer.isEmpty()) {
