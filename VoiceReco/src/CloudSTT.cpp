@@ -49,7 +49,11 @@ static String speech_reco(String const &token, uint8_t *audio, size_t size)
 ;
 
     http.begin(url, certBaiduCom);
+#if AUDIO_16KHZ
     http.addHeader("Content-Type", "audio/pcm;rate=16000");
+#else
+    http.addHeader("Content-Type", "audio/pcm;rate=8000");
+#endif
     int code;
     for (int tries = 0; tries != MAX_RETRIES; ++tries) {
         code = http.POST(audio, size);
@@ -109,7 +113,11 @@ static String url_encode(String const &text)
 
 static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, void (*callback)(size_t bytes_read), String const &text, String const &options)
 {
+#if AUDIO_16KHZ
     String url = "https://tsn.baidu.com/text2audio?tex=" + url_encode(text) + "&aue=4&lan=zh&ctp=1" + options + "&audio_ctrl={\"sampling_rate\":16000}&cuid=" BAIDU_CUID "&tok=" + token;
+#else
+    String url = "https://tsn.baidu.com/text2audio?tex=" + url_encode(text) + "&aue=5&lan=zh&ctp=1" + options + "&cuid=" BAIDU_CUID "&tok=" + token;
+#endif
 
     http.begin(url, certBaiduCom);
     static const char *collect_headers[] = {"Content-Type"};
@@ -128,7 +136,11 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, vo
         return 0;
     }
     String content_type = http.header("Content-Type");
+#if AUDIO_16KHZ
     if (content_type == "audio/basic;codec=pcm;rate=16000;channel=1") {
+#else
+    if (content_type == "audio/basic;codec=pcm;rate=8000;channel=1") {
+#endif
         WiFiClient &stream = http.getStream();
         size_t content_length = http.getSize();
         uint8_t *buf_write_ptr = buffer;
