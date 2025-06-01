@@ -3,6 +3,7 @@
 #include "CloudSTT.h"
 #include "VoiceIO.h"
 #include "AIChat.h"
+#include "IRRemote.h"
 #include "Thermometer.h"
 
 void setup()
@@ -14,6 +15,7 @@ void setup()
     cloudSetup();
     voiceSetup();
     thermoSetup();
+    remoteSetup();
     aiChatReset();
 }
 
