@@ -44,16 +44,14 @@ struct Tool
 
 struct AIOptions
 {
-    // const char *model = "qianfan-agent-intent-32k";
-    // const char *model = "ernie-4.5-turbo-32k";
-    // const char *model = "ernie-x1-turbo-32k";
-    // const char *model = "deepseek-v3";
-    const char *model = "deepseek-r1";
+    const char *model = nullptr;
     float temperature = 0.1;
     int32_t seed = -1;
     int32_t max_tokens = 128;
 };
 
+void aiChatSetup();
 void registerTool(Tool tool);
 void aiChatReset();
-String aiChat(String const &prompt, AIOptions const &options = {});
+String aiChat(String const &prompt);
+AIOptions &aiGetOptions();

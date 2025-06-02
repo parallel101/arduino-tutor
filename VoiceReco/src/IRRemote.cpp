@@ -65,8 +65,8 @@ String get_ac_state(JsonDocument const &arguments)
     result["sleep"] = ac.getSleep();
     result["turbo"] = ac.getTurbo();
     result["light"] = ac.getLight();
-    result["econo"] = ac.getEcono();
-    result["ifeel"] = ac.getIFeel();
+    // result["econo"] = ac.getEcono();
+    // result["ifeel"] = ac.getIFeel();
 
     // result["swing_v"] = greeSwingNames[ac.getSwingVerticalAuto()];
     // result["swing_h"] = greeSwingHNames[ac.getSwingHorizontal()];
@@ -105,12 +105,12 @@ String set_ac_state(JsonDocument const &arguments)
     if (!arguments["light"].isNull()) {
         ac.setLight(arguments["light"]);
     }
-    if (!arguments["econo"].isNull()) {
-        ac.setEcono(arguments["econo"]);
-    }
-    if (!arguments["ifeel"].isNull()) {
-        ac.setIFeel(arguments["ifeel"]);
-    }
+    // if (!arguments["econo"].isNull()) {
+    //     ac.setEcono(arguments["econo"]);
+    // }
+    // if (!arguments["ifeel"].isNull()) {
+    //     ac.setIFeel(arguments["ifeel"]);
+    // }
 
     ac.send();
     return get_ac_state(arguments);
@@ -118,6 +118,9 @@ String set_ac_state(JsonDocument const &arguments)
 
 void remoteSetup()
 {
+    ac.begin();
+    ac.calibrate();
+
     registerTool(Tool{
         .name = "get_ac_state",
         .descrption = "获取空调状态",
@@ -127,12 +130,12 @@ void remoteSetup()
     });
     registerTool(Tool{
         .name = "set_ac_state",
-        .descrption = "设置空调状态（无需指定所有字段，未指定的字段会自动维持原来状态）",
+        .descrption = "设置空调状态（无需指定所有字段，未指定的字段会自动维持原状态）",
         .parameters = {
             {
                 .name = "power",
-                .descrption = "空调开启：true表示打开空调",
-                .type = "bool",
+                .descrption = "空调开启：true=启动，false=关闭",
+                .type = "boolean",
             },
             {
                 .name = "mode",
@@ -146,9 +149,39 @@ void remoteSetup()
             },
             {
                 .name = "fan",
-                .descrption = "空调风扇强度：0=自动，1=弱，2=中，3=强",
+                .descrption = "空调风力：0=自动，1=弱，2=中，3=强",
                 .type = "integer",
             },
+            {
+                .name = "sleep",
+                .descrption = "睡眠模式",
+                .type = "boolean",
+            },
+            {
+                .name = "turbo",
+                .descrption = "强劲模式",
+                .type = "boolean",
+            },
+            {
+                .name = "turbo",
+                .descrption = "强劲模式",
+                .type = "boolean",
+            },
+            {
+                .name = "light",
+                .descrption = "空调灯光",
+                .type = "boolean",
+            },
+            // {
+            //     .name = "econo",
+            //     .descrption = "节能模式",
+            //     .type = "boolean",
+            // },
+            // {
+            //     .name = "ifeel",
+            //     .descrption = "舒适模式",
+            //     .type = "boolean",
+            // },
         },
         .callback = set_ac_state,
     });

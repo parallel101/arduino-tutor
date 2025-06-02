@@ -15,21 +15,20 @@ R"(你是一个家庭语音助手，昵称小智。
 你的职责是帮助用户解决生活问题，可以操控用户家中的电器设备，解决用户需求。
 
 你的输出严格遵守以下规则：
-1. 你的输入来自用户的语音，由于语音识别的局限，输入文本可能存在错别字，请在心里自行纠正，不必告诉用户。
+1. 你的输入来自用户的语音，由于语音识别的局限，输入文本可能有错别字，请在心里纠正，不必告诉用户。
 2. 你的输出将被合成为语音后通过扬声器朗读播报。
 3. 你的输出文本必须符合口语的用于习惯。
 4. 确保你输出的每个字符，都能被语音合成引擎朗读出来，不要包含任何无法朗读的东西。
 5. 不要包含 Markdown 助记符，不要包含程序代码，不要包含 Emoji，但可以包含标点符号。
-6. 回答不得超过 50 字。
-7. 确保回答简短，直达主题，快速解决用户问题，避免废话。
-8. 如果用户请求进行某种操作，请通过 Tool Call 对物联网设备进行操作，解决用户的需求。
-9. 如果用户请求的操作在给定的 Tool 列表中不存在，请直接告诉用户暂不支持。
+6. 回答不得超过 50 字，简洁明了，直接解决用户问题，避免废话。
+7. 若用户请求进行某种操作，请通过 Tool Call 对物联网设备进行操作，解决用户需求。
+8. 若用户请求的操作在 Tool 列表中不存在，请直接告诉用户暂不支持。
 
 用户偏好设置：
 1. 用户昵称：小彭老师
 2. 用户爱好：嵌入式编程
 3. 偏好对话风格：科技并且带着趣味
-4. 语音助手硬件：ESP32C3 微型开发板)";
+4. 语音助手硬件：ESP32 微型开发板)";
 
 static const char *roleName(Role role)
 {
@@ -69,7 +68,41 @@ static void getAITools(Tools toolsArr)
     }
 }
 
-std::vector<Message> messages;
+static std::vector<Message> messages;
+static AIOptions aiOptions;
+
+static String set_assistant_level(JsonDocument const &arguments) {
+    int level = arguments["level"];
+    switch (level) {
+    case 0:
+        aiOptions.model = nullptr;
+        break;
+    case 1:
+        aiOptions.model = "deepseek-v3";
+        break;
+    case 2:
+        aiOptions.model = "deepseek-r1";
+        break;
+    }
+    return R"({"status": "OK"})";
+}
+
+void aiChatSetup()
+{
+    registerTool({
+        .name = "set_assistant_level",
+        .descrption = "设置助手智能等级",
+        .parameters = {
+            {
+                .name = "level",
+                .descrption = "智能等级：0=指令模式（快），1=智能模式（默认），2=思考模式（慢）",
+                .type = "integer",
+            },
+        },
+        .callback = set_assistant_level,
+    });
+    aiChatReset();
+}
 
 void aiChatReset()
 {
@@ -80,7 +113,17 @@ void aiChatReset()
     });
 }
 
-static String aiChatComplete(AIOptions const &options)
+int findTool(String const &name)
+{
+    for (int i = 0; i < tools.size(); ++i) {
+        if (name == tools[i].name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static String aiChatComplete()
 {
     for (int ntc = 0; ntc < MAX_TOOL_CALLS; ++ntc) {
         static const char url[] = "https://qianfan.baidubce.com/v2/chat/completions";
@@ -113,15 +156,15 @@ static String aiChatComplete(AIOptions const &options)
                 }
             }
 
-            doc["model"] = options.model;
+            doc["model"] = aiOptions.model;
             doc["stream"] = false;
             doc["user_id"] = BAIDU_CUID;
-            doc["temperature"] = options.temperature;
-            if (options.seed != -1) {
-                doc["seed"] = options.seed;
+            doc["temperature"] = aiOptions.temperature;
+            if (aiOptions.seed != -1) {
+                doc["seed"] = aiOptions.seed;
             }
-            if (options.max_tokens != -1) {
-                doc["max_tokens"] = options.max_tokens;
+            if (aiOptions.max_tokens != -1) {
+                doc["max_tokens"] = aiOptions.max_tokens;
             }
             getAITools(doc["tools"]);
             doc["tool_choice"] = "auto";
@@ -184,12 +227,7 @@ static String aiChatComplete(AIOptions const &options)
                 String functionArgs = response["tool_calls"][i]["function"]["arguments"];
                 JsonDocument argsDoc;
                 deserializeJson(argsDoc, functionArgs);
-                int toolIndex = -1;
-                for (int j = 0; j < tools.size(); ++j) {
-                    if (functionName == tools[j].name) {
-                        toolIndex = j;
-                    }
-                }
+                int toolIndex = findTool(functionName);
                 String toolResponse;
                 if (toolIndex != -1) {
                     toolResponse = tools[toolIndex].callback(argsDoc);
@@ -213,8 +251,110 @@ static String aiChatComplete(AIOptions const &options)
     return "";
 }
 
-String aiChat(String const &prompt, AIOptions const &options)
+String instructiveChat(String prompt)
 {
+    prompt.replace("。", "");
+    if (prompt == "温度" || prompt == "湿度") {
+        JsonDocument argsDoc;
+        int toolIndex = findTool("get_temperature");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            deserializeJson(resDoc, tools[toolIndex].callback(argsDoc));
+            float temperature = resDoc["temperature"];
+            float humidity = resDoc["humidity"];
+            String result;
+            result += "当前温度";
+            result += temperature;
+            result += "度";
+            result += "，湿度";
+            result += humidity;
+            result += "%";
+            return result;
+        }
+
+    } else if (prompt == "空调状态") {
+        JsonDocument argsDoc;
+        int toolIndex = findTool("get_ac_state");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            deserializeJson(resDoc, tools[toolIndex].callback(argsDoc));
+            bool power = resDoc["power"];
+            float temperature = resDoc["temp"];
+            int fan = resDoc["fan"];
+            int sleep = resDoc["sleep"];
+            int turbo = resDoc["turbo"];
+            int light = resDoc["light"];
+            String result;
+            if (power) {
+                result += "当前温度";
+                result += temperature;
+                result += "度";
+                result += "，风速";
+                if (fan == 0) {
+                    result += "自动";
+                } else {
+                    result += fan;
+                    result += "级";
+                }
+                if (sleep) {
+                    result += "，睡眠模式";
+                }
+                if (turbo) {
+                    result += "，强劲模式";
+                }
+                if (light) {
+                    result += "，灯光开启";
+                }
+            } else {
+                result += "当前空调关闭";
+            }
+            return result;
+        }
+
+    } else if (prompt == "开空调" || prompt == "关空调") {
+        JsonDocument argsDoc;
+        argsDoc["power"] = prompt == "打开空调";
+        int toolIndex = findTool("set_ac_state");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            tools[toolIndex].callback(argsDoc);
+            return "已" + prompt;
+        }
+
+    } else if (prompt == "开灯" || prompt == "关灯") {
+        JsonDocument argsDoc;
+        argsDoc["power"] = prompt == "开灯";
+        int toolIndex = findTool("set_light_state");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            tools[toolIndex].callback(argsDoc);
+            return "已" + prompt;
+        }
+
+    } else if (prompt == "指令模式" || prompt == "智能模式" || prompt == "思考模式") {
+        JsonDocument argsDoc;
+        argsDoc["level"] = prompt == "指令模式" ? 0 : prompt == "思考模式" ? 2 : 1;
+        int toolIndex = findTool("set_assistant_level");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            tools[toolIndex].callback(argsDoc);
+            return "进入" + prompt;
+        }
+    }
+    return "";
+}
+
+String aiChat(String const &prompt)
+{
+    String instructReply = instructiveChat(prompt);
+    if (!instructReply.isEmpty()) {
+        return instructReply;
+    }
+    if (aiOptions.model == nullptr) {
+        Serial.println("instruction not understood");
+        return "";
+    }
+
     if (messages.empty()) {
         aiChatReset();
     }
@@ -222,5 +362,10 @@ String aiChat(String const &prompt, AIOptions const &options)
         .role = Role::User,
         .content = prompt,
     });
-    return aiChatComplete(options);
+    return aiChatComplete();
+}
+
+AIOptions &aiGetOptions()
+{
+    return aiOptions;
 }

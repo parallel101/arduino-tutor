@@ -12,11 +12,13 @@ void setup()
     pinMode(LED_BUILTIN, OUTPUT);
 
     netSetup();
+    digitalWrite(LED_BUILTIN, LOW);
     cloudSetup();
     voiceSetup();
     thermoSetup();
     remoteSetup();
-    aiChatReset();
+    aiChatSetup();
+    digitalWrite(LED_BUILTIN, HIGH);
 }
 
 static int positiveCount = 0;
