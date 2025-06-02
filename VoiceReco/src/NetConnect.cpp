@@ -7,7 +7,7 @@ void netSetup()
     digitalWrite(LED_BUILTIN, LOW);
 
     WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
     WiFi.setTxPower(WIFI_POWER_8_5dBm);

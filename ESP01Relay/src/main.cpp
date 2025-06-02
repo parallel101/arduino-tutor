@@ -1,6 +1,7 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WebServer.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include "secrets.h"
 
 static const char INDEX_HTML[] = R"(
 <html>
@@ -38,12 +39,8 @@ static const char INDEX_HTML[] = R"(
   </script>
 </html>
 )";
-  server.on("/", [] {
-    Serial.println("received / request!");
-    server.send(200, "text/html;charset=utf-8", INDEX_HTML);
-  });
 
-WebServer server(80);
+AsyncWebServer server(80);
 
 void setup() {
     Serial.begin(115200);
@@ -52,31 +49,35 @@ void setup() {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.println("WiFi connecting...");
-        delay(200);
+    int status = WiFi.waitForConnectResult();
+    if (status != WL_CONNECTED) {
+        Serial.printf("WiFi connect failed, status=%d\n", status);
+        return;
     }
-    Serial.println("WiFi connected.");
+    Serial.printf("WiFi connected, ip=%s, gateway=%s\n",
+                  WiFi.localIP().toString().c_str(),
+                  WiFi.gatewayIP().toString().c_str());
 
-    server.on("/set_state", [] {
-        String enable = server.arg("enable");
-        if (enable == "on") {
-            digitalWrite(0, HIGH);
-        } else if (enable == "off") {
-            digitalWrite(0, LOW);
-        }
+    pinMode(0, OUTPUT);
+    digitalWrite(0, LOW);
+
+    server.on("/", [] (AsyncWebServerRequest *request) {
+        request->send(200, "text/html;charset=utf-8", INDEX_HTML);
     });
-    server.on("/set_state", [] {
-        String enable = server.arg("enable");
-        if (enable == "on") {
-            digitalWrite(0, HIGH);
-        } else if (enable == "off") {
-            digitalWrite(0, LOW);
-        }
+    server.on("/on", [] (AsyncWebServerRequest *request) {
+        digitalWrite(0, HIGH);
+        Serial.printf("turned on relay.\n");
+        request->send(200, "text/plain", "OK");
     });
+    server.on("/off", [] (AsyncWebServerRequest *request) {
+        digitalWrite(0, LOW);
+        Serial.printf("turned off relay.\n");
+        request->send(200, "text/plain", "OK");
+    });
+
+    server.begin();
 }
 
 void loop() {
-    server.handleClient();
+    delay(100);
 }
