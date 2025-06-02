@@ -10,12 +10,13 @@
 #define SAMPLE_RATE 8000
 #endif
 #define SAMPLE_CHUNK_SIZE 1024
-#define SAMPLE_BUFFER_SIZE (38 * SAMPLE_CHUNK_SIZE)
-#define I2S_SERIAL_CLOCK 3
-#define I2S_LEFT_RIGHT_CLOCK 2
-#define I2S_MIC_SERIAL_DATA 4
-#define I2S_SPEAKER_SERIAL_DATA 6
-#define I2S_SPEAKER_ENABLE 5
+// #define SAMPLE_BUFFER_SIZE (1024 * SAMPLE_CHUNK_SIZE)
+#define SAMPLE_BUFFER_SIZE (32 * SAMPLE_CHUNK_SIZE)
+#define I2S_SCK GPIO_NUM_6
+#define I2S_WS GPIO_NUM_7
+#define I2S_DIN GPIO_NUM_3
+#define I2S_DOUT GPIO_NUM_5
+#define I2S_ENOUT GPIO_NUM_8
 
 #if AUDIO_16BIT
 typedef int16_t audio_sample_t;
@@ -25,7 +26,7 @@ typedef int8_t audio_sample_t;
 
 // don't mess around with this
 static const i2s_config_t i2s_config = {
-    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_TX),
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
     .sample_rate = SAMPLE_RATE,
 #if AUDIO_16BIT
     .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
@@ -44,10 +45,10 @@ static const i2s_config_t i2s_config = {
 
 // and don't mess around with this
 static const i2s_pin_config_t i2s_pins = {
-    .bck_io_num = I2S_SERIAL_CLOCK,
-    .ws_io_num = I2S_LEFT_RIGHT_CLOCK,
-    .data_out_num = I2S_SPEAKER_SERIAL_DATA,
-    .data_in_num = I2S_MIC_SERIAL_DATA,
+    .bck_io_num = I2S_SCK,
+    .ws_io_num = I2S_WS,
+    .data_out_num = I2S_PIN_NO_CHANGE,
+    .data_in_num = I2S_DIN,
 };
 
 static audio_sample_t *sample_buffer;
@@ -56,18 +57,26 @@ static float rms_db = -99.0f;
 
 void voiceSetup()
 {
-    pinMode(I2S_SPEAKER_ENABLE, OUTPUT);
-    digitalWrite(I2S_SPEAKER_ENABLE, LOW);
+    // pinMode(I2S_SPEAKER_ENABLE, OUTPUT);
+    // digitalWrite(I2S_SPEAKER_ENABLE, LOW);
 
     ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL));
     ESP_ERROR_CHECK(i2s_set_pin(I2S_NUM_0, &i2s_pins));
 
-#if BOARD_HAS_PSRAM
+#if BOARD_HAS_PSRAM && 0
+    if (!psramFound()) {
+        printf("PSRAM not found!\n");
+        delay(5000);
+        abort();
+    }
+    psramInit();
     sample_buffer = (audio_sample_t *)ps_malloc(SAMPLE_BUFFER_SIZE * sizeof(audio_sample_t));
 #else
     sample_buffer = (audio_sample_t *)heap_caps_malloc(SAMPLE_BUFFER_SIZE * sizeof(audio_sample_t), MALLOC_CAP_32BIT | MALLOC_CAP_DMA);
 #endif
     if (!sample_buffer) {
+        printf("Failed to allocate sample buffer!\n");
+        delay(5000);
         abort();
     }
 }
@@ -119,10 +128,10 @@ void voiceDecVolume(uint8_t dec)
 
 size_t voicePlayAudio()
 {
-    digitalWrite(I2S_SPEAKER_ENABLE, HIGH);
+    digitalWrite(I2S_ENOUT, HIGH);
     size_t bytes_written = 0;
     ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, sample_buffer, current_sample * sizeof(audio_sample_t), &bytes_written, portMAX_DELAY));
-    digitalWrite(I2S_SPEAKER_ENABLE, LOW);
+    digitalWrite(I2S_ENOUT, LOW);
     return bytes_written;
 }
 
@@ -152,7 +161,7 @@ size_t voiceReadChunk()
     }
     rms_samples = sqrtf(rms_samples / samples_read);
     rms_db = 20.0f * log10f(rms_samples);
-    // Serial.printf("%f dB\n", rms_db);
-    // Serial.printf("%d\n", current_sample);
+    // printf("%f dB\n", rms_db);
+    // printf("%d\n", current_sample);
     return samples_read;
 }

@@ -1,6 +1,3 @@
-#ifndef __XTENSA__
-#error XTENSA EXPECTED
-#endif
 #include <Arduino.h>
 
 void setup() {
@@ -13,6 +10,6 @@ void loop() {
     Serial.printf("PSRAM: %d/%d\n", ESP.getFreePsram(), ESP.getPsramSize());
     Serial.printf("Heap: %d/%d\n", ESP.getFreeHeap(), ESP.getHeapSize());
     Serial.printf("Heap: %d/%d\n", ESP.getFreeHeap(), ESP.getHeapSize());
-    delay(1000);
+    delay(5000);
     ps_malloc(100);
 }

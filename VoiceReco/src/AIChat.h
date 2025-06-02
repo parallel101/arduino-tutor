@@ -50,6 +50,12 @@ struct AIOptions
     int32_t max_tokens = 128;
 };
 
+struct AIState {
+    std::vector<Tool> tools;
+    std::vector<Message> messages;
+    AIOptions options;
+};
+
 void aiChatSetup();
 void registerTool(Tool tool);
 void aiChatReset();

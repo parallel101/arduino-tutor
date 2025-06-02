@@ -6,7 +6,9 @@
 #include <IRsend.h>
 #include <ir_Gree.h>
 
-IRGreeAC ac(1);
+#define IR_LED_PIN GPIO_NUM_4
+
+static IRGreeAC *ac;
 
 static const char *greeBoolNames[] = {
     "off",
@@ -56,20 +58,20 @@ String get_ac_state(JsonDocument const &arguments)
 {
     JsonDocument result;
 
-    result["power"] = ac.getPower();
-    result["mode"] = greeModeNames[ac.getMode()];
+    result["power"] = ac->getPower();
+    result["mode"] = greeModeNames[ac->getMode()];
 
-    result["temp"] = ac.getTemp();
-    result["fan"] = ac.getFan();
+    result["temp"] = ac->getTemp();
+    result["fan"] = ac->getFan();
 
-    result["sleep"] = ac.getSleep();
-    result["turbo"] = ac.getTurbo();
-    result["light"] = ac.getLight();
-    // result["econo"] = ac.getEcono();
-    // result["ifeel"] = ac.getIFeel();
+    result["sleep"] = ac->getSleep();
+    result["turbo"] = ac->getTurbo();
+    result["light"] = ac->getLight();
+    // result["econo"] = ac->getEcono();
+    // result["ifeel"] = ac->getIFeel();
 
-    // result["swing_v"] = greeSwingNames[ac.getSwingVerticalAuto()];
-    // result["swing_h"] = greeSwingHNames[ac.getSwingHorizontal()];
+    // result["swing_v"] = greeSwingNames[ac->getSwingVerticalAuto()];
+    // result["swing_h"] = greeSwingHNames[ac->getSwingHorizontal()];
 
     String resultStr;
     serializeJson(result, resultStr);
@@ -79,47 +81,48 @@ String get_ac_state(JsonDocument const &arguments)
 String set_ac_state(JsonDocument const &arguments)
 {
     if (!arguments["power"].isNull()) {
-        ac.setPower(arguments["power"]);
+        ac->setPower(arguments["power"]);
     }
     if (!arguments["mode"].isNull()) {
         for (int i = 0; i < sizeof greeModeNames / sizeof greeModeNames[0]; ++i) {
             if (arguments["mode"] == greeModeNames[i]) {
-                ac.setMode(i);
+                ac->setMode(i);
             }
         }
     }
 
     if (!arguments["temp"].isNull()) {
-        ac.setTemp(arguments["temp"]);
+        ac->setTemp(arguments["temp"]);
     }
     if (!arguments["fan"].isNull()) {
-        ac.setFan(arguments["fan"]);
+        ac->setFan(arguments["fan"]);
     }
 
     if (!arguments["sleep"].isNull()) {
-        ac.setSleep(arguments["sleep"]);
+        ac->setSleep(arguments["sleep"]);
     }
     if (!arguments["turbo"].isNull()) {
-        ac.setTurbo(arguments["turbo"]);
+        ac->setTurbo(arguments["turbo"]);
     }
     if (!arguments["light"].isNull()) {
-        ac.setLight(arguments["light"]);
+        ac->setLight(arguments["light"]);
     }
     // if (!arguments["econo"].isNull()) {
-    //     ac.setEcono(arguments["econo"]);
+    //     ac->setEcono(arguments["econo"]);
     // }
     // if (!arguments["ifeel"].isNull()) {
-    //     ac.setIFeel(arguments["ifeel"]);
+    //     ac->setIFeel(arguments["ifeel"]);
     // }
 
-    ac.send();
+    ac->send();
     return get_ac_state(arguments);
 }
 
 void remoteSetup()
 {
-    ac.begin();
-    ac.calibrate();
+    ac = new IRGreeAC(IR_LED_PIN);
+    ac->begin();
+    ac->calibrate();
 
     registerTool(Tool{
         .name = "get_ac_state",

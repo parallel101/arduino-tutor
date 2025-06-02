@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "NetConnect.h"
+#include "GlobalHTTP.h"
 #include "CloudSTT.h"
 #include "VoiceIO.h"
 #include "AIChat.h"
@@ -8,17 +9,25 @@
 
 void setup()
 {
-    Serial.begin(115200);
-    pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(RGB_BUILTIN, OUTPUT);
 
+    neopixelWrite(RGB_BUILTIN, 0, 0, 50);
+    printf("netSetup...\n");
     netSetup();
-    digitalWrite(LED_BUILTIN, LOW);
+    printf("httpSetup...\n");
+    httpSetup();
+    printf("cloudSetup...\n");
     cloudSetup();
-    voiceSetup();
-    thermoSetup();
-    remoteSetup();
+    printf("aiChatSetup...\n");
     aiChatSetup();
-    digitalWrite(LED_BUILTIN, HIGH);
+    printf("voiceSetup...\n");
+    voiceSetup();
+    printf("thermoSetup...\n");
+    thermoSetup();
+    printf("remoteSetup...\n");
+    remoteSetup();
+    neopixelWrite(RGB_BUILTIN, 0, 0, 0);
+    printf("setup complete.\n");
 }
 
 static int positiveCount = 0;
@@ -33,10 +42,10 @@ static const int MAX_PRELOGUE_COUNT = 7 * 1024;
 static void voice_play_callback(size_t audio_bytes)
 {
     if (audio_bytes > 0) {
-        Serial.printf("Playing %d bytes...\n", audio_bytes);
+        printf("Playing %zu bytes...\n", audio_bytes);
         voiceSetAudioSize(audio_bytes);
         size_t bytes_played = voicePlayAudio();
-        Serial.printf("Played %d bytes.\n", bytes_played);
+        printf("Played %zu bytes.\n", bytes_played);
     }
 }
 
@@ -63,60 +72,61 @@ static void try_fix_answer(String &answer)
 
 static void recognize_voice()
 {
-    digitalWrite(LED_BUILTIN, LOW);
-    Serial.printf("Recognizing %zd bytes...\n", voiceGetAudioSize());
+    neopixelWrite(RGB_BUILTIN, 0, 50, 50);
+    printf("Recognizing %zu bytes...\n", voiceGetAudioSize());
     String prompt = cloudQuery(voiceGetAudioBuffer(), voiceGetAudioSize());
     voiceClearAudioBuffer();
     try_fix_prompt(prompt);
     if (prompt.isEmpty()) {
-        Serial.printf("No prompt detected.\n");
+        printf("No prompt detected.\n");
         digitalWrite(LED_BUILTIN, HIGH);
         return;
     }
-    Serial.printf("Prompt [%s]\n", prompt.c_str());
+    printf("Prompt [%s]\n", prompt.c_str());
 
-    digitalWrite(LED_BUILTIN, HIGH);
+    neopixelWrite(RGB_BUILTIN, 0, 50, 0);
     aiChatReset();
     String answer = aiChat(prompt);
     try_fix_answer(answer);
     if (answer.isEmpty()) {
-        Serial.printf("No answer generated.\n");
+        printf("No answer generated.\n");
         return;
     }
-    Serial.printf("Answer [%s]\n", answer.c_str());
-    digitalWrite(LED_BUILTIN, LOW);
+    printf("Answer [%s]\n", answer.c_str());
+    neopixelWrite(RGB_BUILTIN, 50, 50, 0);
 
     String options = "&spd=5";
     size_t audio_bytes = cloudSynth(
         voiceGetAudioBuffer(), voiceGetAudioMaxSize(),
         voice_play_callback, answer, options);
-    Serial.printf("Synthesized %d bytes.\n", audio_bytes);
+    printf("Synthesized %zu bytes.\n", audio_bytes);
 
     voiceClearAudioBuffer();
-    digitalWrite(LED_BUILTIN, HIGH);
+    neopixelWrite(RGB_BUILTIN, 0, 0, 0);
     delay(200);
 }
 
 void loop()
 {
+    neopixelWrite(RGB_BUILTIN, 4, 0, 0);
     size_t bytes_read = voiceReadChunk();
     float rms_db = voiceRMSdB();
-    Serial.printf("%f dB\n", rms_db);
+    printf("%f dB\n", rms_db);
     if (voiceBufferFull()) {
         digitalWrite(LED_BUILTIN, HIGH);
-        Serial.printf("Voice too long.\n");
+        printf("Voice too long.\n");
         voiceClearAudioBuffer();
         negativeCount = 0;
         positiveCount = 0;
     } else if (rms_db <= (positiveCount > 0 ? THRESHOLD_DB : START_THRESHOLD_DB)) {
-        digitalWrite(LED_BUILTIN, HIGH);
+        neopixelWrite(RGB_BUILTIN, 50, 0, 0);
         if (positiveCount > 0) {
             negativeCount += bytes_read;
             if (negativeCount >= MAX_NEGATIVE_COUNT) {
                 if (positiveCount >= MIN_POSITIVE_COUNT) {
                     recognize_voice();
                 } else {
-                    Serial.printf("Voice too short.\n");
+                    printf("Voice too short.\n");
                 }
                 negativeCount = 0;
                 positiveCount = 0;
@@ -125,7 +135,7 @@ void loop()
             voiceClearAudioBuffer(MAX_PRELOGUE_COUNT);
         }
     } else {
-        digitalWrite(LED_BUILTIN, LOW);
+        neopixelWrite(RGB_BUILTIN, 0, 0, 0);
         negativeCount = 0;
         positiveCount += bytes_read;
     }

@@ -2,7 +2,9 @@
 #include "AIChat.h"
 #include <DHT.h>
 
-static DHT dht;
+#define DHT_PIN GPIO_NUM_13
+
+static DHT *dht;
 static bool isDHTReady = false;
 
 static String get_temperature(JsonDocument const &arguments) {
@@ -20,7 +22,8 @@ static String get_temperature(JsonDocument const &arguments) {
 }
 
 void thermoSetup() {
-    dht.setup(0);
+    dht = new DHT;
+    dht->setup(DHT_PIN);
     registerTool(Tool{
         .name = "get_temperature",
         .descrption = "获取房间温度和湿度",
@@ -31,6 +34,6 @@ void thermoSetup() {
 }
 
 void thermoRead(float &humidity, float &temperature) {
-    humidity = dht.getHumidity();
-    temperature = dht.getTemperature();
+    humidity = dht->getHumidity();
+    temperature = dht->getTemperature();
 }

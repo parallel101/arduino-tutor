@@ -4,25 +4,21 @@
 
 void netSetup()
 {
-    digitalWrite(LED_BUILTIN, LOW);
-
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
     WiFi.setTxPower(WIFI_POWER_8_5dBm);
-    bool led = false;
+    bool led = true;
     while (true) {
         wl_status_t status = WiFi.status();
         if (status == WL_CONNECTED) {
-            Serial.println("WiFi connected");
-            digitalWrite(LED_BUILTIN, HIGH);
+            printf("WiFi connected\n");
             break;
         } else {
-            Serial.print("WiFi connecting, status=");
-            Serial.println(status);
-            digitalWrite(LED_BUILTIN, (led = !led));
-            delay(200);
+            printf("WiFi connecting, status=%d\n", status);
+            led = !led;
+            delay(100);
         }
     }
 }
@@ -32,7 +28,7 @@ void netSetup()
 //     while (WiFi.status() != WL_CONNECTED) {
 //         bool led = false;
 //         digitalWrite(LED_BUILTIN, LOW);
-//         Serial.println("WiFi disconnected, reconnecting...");
+//         printf("WiFi disconnected, reconnecting...\n");
 //         WiFi.reconnect();
 //         while (WiFi.status() != WL_CONNECTED) {
 //             digitalWrite(LED_BUILTIN, led = !led);

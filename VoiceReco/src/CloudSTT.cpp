@@ -15,24 +15,24 @@ static String get_access_token()
 {
     static const char url[] = "https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=" BAIDU_VOP_API_KEY "&client_secret=" BAIDU_VOP_SECRET_KEY;
 
-    http.begin(url, certBaiduCom);
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Accept", "application/json");
+    http->begin(url, certBaiduCom);
+    http->addHeader("Content-Type", "application/json");
+    http->addHeader("Accept", "application/json");
     int code;
     for (int tries = 0; tries != MAX_RETRIES; ++tries) {
-        code = http.POST({});
+        code = http->POST({});
         if (code >= 0) {
             break;
         }
         delay(RETRY_DELAY);
     }
     if (code != 200) {
-        http.end();
+        http->end();
         report_error(code);
         return "";
     }
-    String body = http.getString();
-    http.end();
+    String body = http->getString();
+    http->end();
     JsonDocument doc;
     deserializeJson(doc, body);
     int errNo = doc["err_no"];
@@ -48,27 +48,27 @@ static String speech_reco(String const &token, uint8_t *audio, size_t size)
     String url = "https://vop.baidu.com/server_api?dev_pid=1537&cuid=" BAIDU_CUID "&token=" + token;
 ;
 
-    http.begin(url, certBaiduCom);
+    http->begin(url, certBaiduCom);
 #if AUDIO_16KHZ
-    http.addHeader("Content-Type", "audio/pcm;rate=16000");
+    http->addHeader("Content-Type", "audio/pcm;rate=16000");
 #else
-    http.addHeader("Content-Type", "audio/pcm;rate=8000");
+    http->addHeader("Content-Type", "audio/pcm;rate=8000");
 #endif
     int code;
     for (int tries = 0; tries != MAX_RETRIES; ++tries) {
-        code = http.POST(audio, size);
+        code = http->POST(audio, size);
         if (code >= 0) {
             break;
         }
         delay(RETRY_DELAY);
     }
     if (code != 200) {
-        http.end();
+        http->end();
         report_error(code);
         return "";
     }
-    String body = http.getString();
-    http.end();
+    String body = http->getString();
+    http->end();
     JsonDocument doc;
     deserializeJson(doc, body);
     int errNo = doc["err_no"];
@@ -119,30 +119,30 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, vo
     String url = "https://tsn.baidu.com/text2audio?tex=" + url_encode(text) + "&aue=5&lan=zh&ctp=1" + options + "&cuid=" BAIDU_CUID "&tok=" + token;
 #endif
 
-    http.begin(url, certBaiduCom);
+    http->begin(url, certBaiduCom);
     static const char *collect_headers[] = {"Content-Type"};
-    http.collectHeaders(collect_headers, sizeof collect_headers / sizeof collect_headers[0]);
+    http->collectHeaders(collect_headers, sizeof collect_headers / sizeof collect_headers[0]);
     int code;
     for (int tries = 0; tries != MAX_RETRIES; ++tries) {
-        code = http.GET();
+        code = http->GET();
         if (code >= 0) {
             break;
         }
         delay(RETRY_DELAY);
     }
     if (code != 200) {
-        http.end();
+        http->end();
         report_error(code);
         return 0;
     }
-    String content_type = http.header("Content-Type");
+    String content_type = http->header("Content-Type");
 #if AUDIO_16KHZ
     if (content_type == "audio/basic;codec=pcm;rate=16000;channel=1") {
 #else
     if (content_type == "audio/basic;codec=pcm;rate=8000;channel=1") {
 #endif
-        WiFiClient &stream = http.getStream();
-        size_t content_length = http.getSize();
+        WiFiClient &stream = http->getStream();
+        size_t content_length = http->getSize();
         uint8_t *buf_write_ptr = buffer;
         uint8_t *buf_end_ptr = buffer + size;
         if (content_length == 0) {
@@ -170,13 +170,13 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, vo
             callback(buf_write_ptr - buffer);
             buf_write_ptr = buffer;
         }
-        content_length = http.getSize();
-        http.end();
+        content_length = http->getSize();
+        http->end();
         return content_length;
 
     } else if (content_type == "application/json") {
-        String body = http.getString();
-        http.end();
+        String body = http->getString();
+        http->end();
         JsonDocument doc;
         deserializeJson(doc, body);
         report_error(doc["err_msg"].as<String>());
@@ -184,23 +184,25 @@ static size_t speech_synth(String const &token, uint8_t *buffer, size_t size, vo
 
     } else {
         report_error(content_type);
-        http.end();
+        http->end();
         return 0;
     }
 }
 
-static String token;
+static char token[128];
 
 void cloudSetup()
 {
     for (int tries = 0; tries != MAX_RETRIES; ++tries) {
-        token = get_access_token();
-        if (!token.isEmpty()) {
+        memset(token, 0, sizeof token);
+        get_access_token().toCharArray(token, sizeof token);
+        if (token[0] == 0) {
             break;
         }
         delay(RETRY_DELAY);
     }
-    if (token.isEmpty()) {
+    printf("access token: %s\n", token);
+    if (token[0] == 0) {
         report_error("failed to get access token");
     }
 }
