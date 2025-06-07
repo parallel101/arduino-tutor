@@ -1,43 +1,22 @@
 #include <Arduino.h>
-#include "NetConnect.h"
+#include "WebPage.h"
 #include "GlobalHTTP.h"
 #include "CloudSTT.h"
 #include "VoiceIO.h"
 #include "AIChat.h"
 #include "IRRemote.h"
 #include "Thermometer.h"
-
-void setup()
-{
-    pinMode(RGB_BUILTIN, OUTPUT);
-
-    neopixelWrite(RGB_BUILTIN, 0, 0, 50);
-    printf("netSetup...\n");
-    netSetup();
-    printf("httpSetup...\n");
-    httpSetup();
-    printf("cloudSetup...\n");
-    cloudSetup();
-    printf("aiChatSetup...\n");
-    aiChatSetup();
-    printf("voiceSetup...\n");
-    voiceSetup();
-    printf("thermoSetup...\n");
-    thermoSetup();
-    printf("remoteSetup...\n");
-    remoteSetup();
-    neopixelWrite(RGB_BUILTIN, 0, 0, 0);
-    printf("setup complete.\n");
-}
+#include "Assistant.h"
+#include "secrets.h"
 
 static int positiveCount = 0;
 static int negativeCount = 0;
 
-static const float START_THRESHOLD_DB = -53.0f;
-static const float THRESHOLD_DB = -61.0f;
+static const float START_THRESHOLD_DB = -55.0f;
+static const float THRESHOLD_DB = -62.0f;
 static const int MAX_NEGATIVE_COUNT = 7 * 1024;
 static const int MIN_POSITIVE_COUNT = 5 * 1024;
-static const int MAX_PRELOGUE_COUNT = 7 * 1024;
+static const int MAX_PRELOGUE_COUNT = 8 * 1024;
 
 static void voice_play_callback(size_t audio_bytes)
 {
@@ -70,9 +49,18 @@ static void try_fix_answer(String &answer)
     }
 }
 
+static void play_string(String const &text)
+{
+    size_t audio_bytes = cloudSynth(
+        voiceGetAudioBuffer(), voiceGetAudioMaxSize(),
+        voice_play_callback, text, getSynthOptions());
+    printf("Synthesized %zu bytes.\n", audio_bytes);
+    voiceClearAudioBuffer();
+}
+
 static void recognize_voice()
 {
-    neopixelWrite(RGB_BUILTIN, 0, 50, 50);
+    neopixelWrite(RGB_BUILTIN, 0, 0, 50);
     printf("Recognizing %zu bytes...\n", voiceGetAudioSize());
     String prompt = cloudQuery(voiceGetAudioBuffer(), voiceGetAudioSize());
     voiceClearAudioBuffer();
@@ -83,9 +71,10 @@ static void recognize_voice()
         return;
     }
     printf("Prompt [%s]\n", prompt.c_str());
+    resetAssistantSleep();
 
-    neopixelWrite(RGB_BUILTIN, 0, 50, 0);
-    aiChatReset();
+    neopixelWrite(RGB_BUILTIN, 0, 50, 50);
+    // aiChatReset();
     String answer = aiChat(prompt);
     try_fix_answer(answer);
     if (answer.isEmpty()) {
@@ -93,25 +82,46 @@ static void recognize_voice()
         return;
     }
     printf("Answer [%s]\n", answer.c_str());
-    neopixelWrite(RGB_BUILTIN, 50, 50, 0);
-
-    String options = "&spd=5";
-    size_t audio_bytes = cloudSynth(
-        voiceGetAudioBuffer(), voiceGetAudioMaxSize(),
-        voice_play_callback, answer, options);
-    printf("Synthesized %zu bytes.\n", audio_bytes);
-
-    voiceClearAudioBuffer();
+    neopixelWrite(RGB_BUILTIN, 0, 0, 50);
+    play_string(answer);
     neopixelWrite(RGB_BUILTIN, 0, 0, 0);
-    delay(200);
+    delay(100);
 }
+
+void setup()
+{
+    pinMode(RGB_BUILTIN, OUTPUT);
+
+    neopixelWrite(RGB_BUILTIN, 20, 20, 20);
+    printf("webSetup...\n");
+    webSetup();
+    printf("httpSetup...\n");
+    httpSetup();
+    printf("cloudSetup...\n");
+    cloudSetup();
+    printf("aiChatSetup...\n");
+    aiChatSetup();
+    printf("voiceSetup...\n");
+    voiceSetup();
+    printf("thermoSetup...\n");
+    thermoSetup();
+    printf("remoteSetup...\n");
+    remoteSetup();
+    printf("assistantSetup...\n");
+    assistantSetup();
+    neopixelWrite(RGB_BUILTIN, 0, 0, 0);
+    printf("setup complete.\n");
+
+    play_string("WiFi 已连接，地址：" + WiFi.localIP().toString());
+}
+
 
 void loop()
 {
-    neopixelWrite(RGB_BUILTIN, 4, 0, 0);
+    int brightness = aiChatGetLevel() >= 1 ? 40 : 4;
     size_t bytes_read = voiceReadChunk();
     float rms_db = voiceRMSdB();
-    printf("%f dB\n", rms_db);
+    // printf("%f dB\n", rms_db);
     if (voiceBufferFull()) {
         digitalWrite(LED_BUILTIN, HIGH);
         printf("Voice too long.\n");
@@ -119,7 +129,7 @@ void loop()
         negativeCount = 0;
         positiveCount = 0;
     } else if (rms_db <= (positiveCount > 0 ? THRESHOLD_DB : START_THRESHOLD_DB)) {
-        neopixelWrite(RGB_BUILTIN, 50, 0, 0);
+        neopixelWrite(RGB_BUILTIN, brightness, 0, 0);
         if (positiveCount > 0) {
             negativeCount += bytes_read;
             if (negativeCount >= MAX_NEGATIVE_COUNT) {
@@ -133,9 +143,10 @@ void loop()
             }
         } else {
             voiceClearAudioBuffer(MAX_PRELOGUE_COUNT);
+            updateAssistantSleep();
         }
     } else {
-        neopixelWrite(RGB_BUILTIN, 0, 0, 0);
+        neopixelWrite(RGB_BUILTIN, 0, brightness, 0);
         negativeCount = 0;
         positiveCount += bytes_read;
     }

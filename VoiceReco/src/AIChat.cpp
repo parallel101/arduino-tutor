@@ -11,7 +11,7 @@
 #define MAX_TOOL_CALLS 3
 #define RETRY_DELAY 100
 static const char SYSTEM_INSTRUCTION[] =
-R"(你是一个家庭语音助手，昵称小智。
+R"(你是一个家庭语音助手，昵称)" NICK_NAME R"(。
 你的职责是帮助用户解决生活问题，可以操控用户家中的电器设备，解决用户需求。
 
 你的输出严格遵守以下规则：
@@ -30,7 +30,9 @@ R"(你是一个家庭语音助手，昵称小智。
 3. 偏好对话风格：科技并且带着趣味
 4. 语音助手硬件：ESP32 微型开发板)";
 
-static AIState *aiState;
+static std::vector<Tool> tools;
+static std::vector<Message> messages;
+static AIOptions aiOptions;
 
 static const char *roleName(Role role)
 {
@@ -50,62 +52,57 @@ static const char *roleName(Role role)
 
 void registerTool(Tool tool)
 {
-    aiState->tools.push_back(std::move(tool));
+    tools.push_back(std::move(tool));
 }
 
 template <class Tools>
 static void getAITools(Tools toolsArr)
 {
-    for (int i = 0; i < aiState->tools.size(); ++i) {
+    for (int i = 0; i < tools.size(); ++i) {
         toolsArr[i]["type"] = "function";
-        toolsArr[i]["function"]["name"] = aiState->tools[i].name;
-        toolsArr[i]["function"]["descrption"] = aiState->tools[i].descrption;
+        toolsArr[i]["function"]["name"] = tools[i].name;
+        toolsArr[i]["function"]["descrption"] = tools[i].descrption;
         toolsArr[i]["function"]["parameters"]["type"] = "object";
-        for (int j = 0; j < aiState->tools[i].parameters.size(); ++j) {
-            toolsArr[i]["function"]["parameters"]["properties"][aiState->tools[i].parameters[j].name]["descrption"] = aiState->tools[i].parameters[j].descrption;
-            toolsArr[i]["function"]["parameters"]["properties"][aiState->tools[i].parameters[j].name]["type"] = aiState->tools[i].parameters[j].type;
+        for (int j = 0; j < tools[i].parameters.size(); ++j) {
+            toolsArr[i]["function"]["parameters"]["properties"][tools[i].parameters[j].name]["descrption"] = tools[i].parameters[j].descrption;
+            toolsArr[i]["function"]["parameters"]["properties"][tools[i].parameters[j].name]["type"] = tools[i].parameters[j].type;
         }
     }
 }
 
-static String set_assistant_level(JsonDocument const &arguments) {
-    int level = arguments["level"];
+static int aiLevel;
+
+int aiChatGetLevel()
+{
+    return aiLevel;
+}
+
+void aiChatSetLevel(int level)
+{
+    aiLevel = level;
     switch (level) {
     case 0:
-        aiState->options.model = nullptr;
+        aiOptions.model = nullptr;
         break;
     case 1:
-        aiState->options.model = "deepseek-v3";
+        aiOptions.model = "deepseek-v3";
         break;
     case 2:
-        aiState->options.model = "deepseek-r1";
+        aiOptions.model = "deepseek-r1";
         break;
     }
-    return R"({"status": "OK"})";
 }
 
 void aiChatSetup()
 {
-    aiState = new AIState;
-    registerTool({
-        .name = "set_assistant_level",
-        .descrption = "设置助手智能等级",
-        .parameters = {
-            {
-                .name = "level",
-                .descrption = "智能等级：0=指令模式（快），1=智能模式（默认），2=思考模式（慢）",
-                .type = "integer",
-            },
-        },
-        .callback = set_assistant_level,
-    });
+    aiLevel = 0;
     aiChatReset();
 }
 
 void aiChatReset()
 {
-    aiState->messages.clear();
-    aiState->messages.push_back({
+    messages.clear();
+    messages.push_back({
         .role = Role::System,
         .content = SYSTEM_INSTRUCTION,
     });
@@ -113,8 +110,8 @@ void aiChatReset()
 
 int findTool(String const &name)
 {
-    for (int i = 0; i < aiState->tools.size(); ++i) {
-        if (name == aiState->tools[i].name) {
+    for (int i = 0; i < tools.size(); ++i) {
+        if (name == tools[i].name) {
             return i;
         }
     }
@@ -125,70 +122,70 @@ static String aiChatComplete()
 {
     for (int ntc = 0; ntc < MAX_TOOL_CALLS; ++ntc) {
         static const char url[] = "https://qianfan.baidubce.com/v2/chat/completions";
-        http->begin(url, certBaiduCom);
-        http->setTimeout(20 * 1000);
-        http->addHeader("Content-Type", "application/json");
-        http->addHeader("Authorization", "Bearer " BAIDU_BCE_API_KEY);
+        http.begin(url, certBaiduCom);
+        http.setTimeout(20 * 1000);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("Authorization", "Bearer " BAIDU_BCE_API_KEY);
 
         {
             JsonDocument doc;
-            for (size_t i = 0; i != aiState->messages.size(); ++i) {
-                doc["aiState->messages"][i]["role"] = roleName(aiState->messages[i].role);
-                doc["aiState->messages"][i]["content"] = aiState->messages[i].content;
-                if (!aiState->messages[i].reasoningContent.isEmpty()) {
-                    doc["aiState->messages"][i]["reasoning_content"] = aiState->messages[i].reasoningContent;
+            for (size_t i = 0; i != messages.size(); ++i) {
+                doc["messages"][i]["role"] = roleName(messages[i].role);
+                doc["messages"][i]["content"] = messages[i].content;
+                if (!messages[i].reasoningContent.isEmpty()) {
+                    doc["messages"][i]["reasoning_content"] = messages[i].reasoningContent;
                 }
-                if (!aiState->messages[i].name.isEmpty()) {
-                    doc["aiState->messages"][i]["name"] = aiState->messages[i].name;
+                if (!messages[i].name.isEmpty()) {
+                    doc["messages"][i]["name"] = messages[i].name;
                 }
-                if (!aiState->messages[i].toolCallId.isEmpty()) {
-                    doc["aiState->messages"][i]["tool_call_id"] = aiState->messages[i].toolCallId;
+                if (!messages[i].toolCallId.isEmpty()) {
+                    doc["messages"][i]["tool_call_id"] = messages[i].toolCallId;
                 }
-                if (!aiState->messages[i].toolCalls.empty()) {
-                    for (int j = 0; j < aiState->messages[i].toolCalls.size(); ++j) {
-                        doc["aiState->messages"][i]["tool_calls"][j]["id"] = aiState->messages[i].toolCalls[j].id;
-                        doc["aiState->messages"][i]["tool_calls"][j]["type"] = "function";
-                        doc["aiState->messages"][i]["tool_calls"][j]["function"]["argments"] = aiState->messages[i].toolCalls[j].functionArgments;
-                        doc["aiState->messages"][i]["tool_calls"][j]["function"]["name"] = aiState->messages[i].toolCalls[j].functionName;
+                if (!messages[i].toolCalls.empty()) {
+                    for (int j = 0; j < messages[i].toolCalls.size(); ++j) {
+                        doc["messages"][i]["tool_calls"][j]["id"] = messages[i].toolCalls[j].id;
+                        doc["messages"][i]["tool_calls"][j]["type"] = "function";
+                        doc["messages"][i]["tool_calls"][j]["function"]["argments"] = messages[i].toolCalls[j].functionArgments;
+                        doc["messages"][i]["tool_calls"][j]["function"]["name"] = messages[i].toolCalls[j].functionName;
                     }
                 }
             }
 
-            doc["model"] = aiState->options.model;
+            doc["model"] = aiOptions.model;
             doc["stream"] = false;
             doc["user_id"] = BAIDU_CUID;
-            doc["temperature"] = aiState->options.temperature;
-            if (aiState->options.seed != -1) {
-                doc["seed"] = aiState->options.seed;
+            doc["temperature"] = aiOptions.temperature;
+            if (aiOptions.seed != -1) {
+                doc["seed"] = aiOptions.seed;
             }
-            if (aiState->options.max_tokens != -1) {
-                doc["max_tokens"] = aiState->options.max_tokens;
+            if (aiOptions.max_tokens != -1) {
+                doc["max_tokens"] = aiOptions.max_tokens;
             }
-            getAITools(doc["aiState->tools"]);
+            getAITools(doc["tools"]);
             doc["tool_choice"] = "auto";
 
             String jsonStr;
             serializeJson(doc, jsonStr);
-            printf("request json: %s\n", jsonStr.c_str());
+            // printf("request json: %s\n", jsonStr.c_str());
 
             int code;
             for (int tries = 0; tries != MAX_RETRIES; ++tries) {
-                code = http->POST(jsonStr);
+                code = http.POST(jsonStr);
                 if (code >= 0) {
                     break;
                 }
                 delay(RETRY_DELAY);
             }
             if (code != 200) {
-                report_error(http->getString());
-                http->end();
+                report_error(http.getString());
+                http.end();
                 return "";
             }
         }
 
-        String body = http->getString();
-        http->end();
-        printf("response json: %s\n", body.c_str());
+        String body = http.getString();
+        http.end();
+        // printf("response json: %s\n", body.c_str());
 
         JsonDocument doc;
         deserializeJson(doc, body);
@@ -215,7 +212,7 @@ static String aiChatComplete()
                 .functionArgments = response["tool_calls"][i]["function"]["arguments"],
             });
         }
-        aiState->messages.push_back(std::move(assistantMessage));
+        messages.push_back(std::move(assistantMessage));
 
         if (!response["tool_calls"].isNull() && response["tool_calls"].size() > 0) {
             std::vector<String> results;
@@ -228,12 +225,15 @@ static String aiChatComplete()
                 int toolIndex = findTool(functionName);
                 String toolResponse;
                 if (toolIndex != -1) {
-                    toolResponse = aiState->tools[toolIndex].callback(argsDoc);
+                    toolResponse = tools[toolIndex].callback(argsDoc);
                 } else {
                     toolResponse = R"({"error": "tool not found"})";
                 }
                 printf("tool response: %s\n", toolResponse.c_str());
-                aiState->messages.push_back({
+                if (toolResponse == "SHUTDOWN") {
+                    return "";
+                }
+                messages.push_back({
                     .role = Role::Tool,
                     .content = std::move(toolResponse),
                     .name = functionName,
@@ -257,7 +257,7 @@ String instructiveChat(String prompt)
         int toolIndex = findTool("get_temperature");
         if (toolIndex != -1) {
             JsonDocument resDoc;
-            deserializeJson(resDoc, aiState->tools[toolIndex].callback(argsDoc));
+            deserializeJson(resDoc, tools[toolIndex].callback(argsDoc));
             float temperature = resDoc["temperature"];
             float humidity = resDoc["humidity"];
             String result;
@@ -275,7 +275,7 @@ String instructiveChat(String prompt)
         int toolIndex = findTool("get_ac_state");
         if (toolIndex != -1) {
             JsonDocument resDoc;
-            deserializeJson(resDoc, aiState->tools[toolIndex].callback(argsDoc));
+            deserializeJson(resDoc, tools[toolIndex].callback(argsDoc));
             bool power = resDoc["power"];
             float temperature = resDoc["temp"];
             int fan = resDoc["fan"];
@@ -315,8 +315,28 @@ String instructiveChat(String prompt)
         int toolIndex = findTool("set_ac_state");
         if (toolIndex != -1) {
             JsonDocument resDoc;
-            aiState->tools[toolIndex].callback(argsDoc);
+            tools[toolIndex].callback(argsDoc);
             return "已" + prompt;
+        }
+
+    } else if (prompt == "空调提高") {
+        JsonDocument argsDoc;
+        argsDoc["temp_delta"] = +1;
+        int toolIndex = findTool("change_ac_temp");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            tools[toolIndex].callback(argsDoc);
+            return "空调已调高一度";
+        }
+
+    } else if (prompt == "空调降低") {
+        JsonDocument argsDoc;
+        argsDoc["temp_delta"] = -1;
+        int toolIndex = findTool("change_ac_temp");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            tools[toolIndex].callback(argsDoc);
+            return "空调已调低一度";
         }
 
     } else if (prompt == "开灯" || prompt == "关灯") {
@@ -325,7 +345,7 @@ String instructiveChat(String prompt)
         int toolIndex = findTool("set_light_state");
         if (toolIndex != -1) {
             JsonDocument resDoc;
-            aiState->tools[toolIndex].callback(argsDoc);
+            tools[toolIndex].callback(argsDoc);
             return "已" + prompt;
         }
 
@@ -335,28 +355,48 @@ String instructiveChat(String prompt)
         int toolIndex = findTool("set_assistant_level");
         if (toolIndex != -1) {
             JsonDocument resDoc;
-            aiState->tools[toolIndex].callback(argsDoc);
+            tools[toolIndex].callback(argsDoc);
             return "进入" + prompt;
         }
+
+    } else if (prompt == NICK_NAME || prompt == NICK_NAME_TYPO) {
+        JsonDocument argsDoc;
+        argsDoc["level"] = 1;
+        int toolIndex = findTool("set_assistant_level");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            tools[toolIndex].callback(argsDoc);
+        }
+        return "";
+
+    } else if (prompt == "关机") {
+        JsonDocument argsDoc;
+        int toolIndex = findTool("shutdown_assistant");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            tools[toolIndex].callback(argsDoc);
+        }
+        return "已关机";
     }
     return "";
 }
 
 String aiChat(String const &prompt)
 {
+    bool instructMode = aiOptions.model == nullptr;
     String instructReply = instructiveChat(prompt);
     if (!instructReply.isEmpty()) {
         return instructReply;
     }
-    if (aiState->options.model == nullptr) {
+    if (instructMode) {
         printf("instruction not understood\n");
         return "";
     }
 
-    if (aiState->messages.empty()) {
+    if (messages.empty()) {
         aiChatReset();
     }
-    aiState->messages.push_back({
+    messages.push_back({
         .role = Role::User,
         .content = prompt,
     });
@@ -365,5 +405,5 @@ String aiChat(String const &prompt)
 
 AIOptions &aiGetOptions()
 {
-    return aiState->options;
+    return aiOptions;
 }

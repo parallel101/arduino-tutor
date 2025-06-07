@@ -44,3 +44,5 @@ CompileFlags:
     - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/WiFiProv/src
     - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src
     - -D__XTENSA__=1
+    - -D__machine_ssize_t_defined=1
+    - -D_ssize_t=int

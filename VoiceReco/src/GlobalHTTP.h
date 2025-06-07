@@ -2,6 +2,6 @@
 
 #include <HTTPClient.h>
 
-extern HTTPClient *http;
+extern HTTPClient http;
 
 void httpSetup();

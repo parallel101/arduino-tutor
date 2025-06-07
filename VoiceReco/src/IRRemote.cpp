@@ -67,8 +67,6 @@ String get_ac_state(JsonDocument const &arguments)
     result["sleep"] = ac->getSleep();
     result["turbo"] = ac->getTurbo();
     result["light"] = ac->getLight();
-    // result["econo"] = ac->getEcono();
-    // result["ifeel"] = ac->getIFeel();
 
     // result["swing_v"] = greeSwingNames[ac->getSwingVerticalAuto()];
     // result["swing_h"] = greeSwingHNames[ac->getSwingHorizontal()];
@@ -107,12 +105,17 @@ String set_ac_state(JsonDocument const &arguments)
     if (!arguments["light"].isNull()) {
         ac->setLight(arguments["light"]);
     }
-    // if (!arguments["econo"].isNull()) {
-    //     ac->setEcono(arguments["econo"]);
-    // }
-    // if (!arguments["ifeel"].isNull()) {
-    //     ac->setIFeel(arguments["ifeel"]);
-    // }
+
+    ac->send();
+    return get_ac_state(arguments);
+}
+
+String change_ac_temp(JsonDocument const &arguments)
+{
+    if (!arguments["temp_delta"].isNull()) {
+        int dt = arguments["temp_delta"];
+        ac->setTemp(ac->getTemp() + dt);
+    }
 
     ac->send();
     return get_ac_state(arguments);
@@ -175,17 +178,19 @@ void remoteSetup()
                 .descrption = "空调灯光",
                 .type = "boolean",
             },
-            // {
-            //     .name = "econo",
-            //     .descrption = "节能模式",
-            //     .type = "boolean",
-            // },
-            // {
-            //     .name = "ifeel",
-            //     .descrption = "舒适模式",
-            //     .type = "boolean",
-            // },
         },
         .callback = set_ac_state,
+    });
+    registerTool(Tool{
+        .name = "change_ac_temp",
+        .descrption = "增量修改空调温度，在现有温度基础上下变化",
+        .parameters = {
+            {
+                .name = "temp_delta",
+                .descrption = "空调温度增量（摄氏度）：+1=调高1度，-1=调低1度",
+                .type = "integer",
+            },
+        },
+        .callback = change_ac_temp,
     });
 }

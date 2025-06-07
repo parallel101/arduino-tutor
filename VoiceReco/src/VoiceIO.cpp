@@ -10,8 +10,8 @@
 #define SAMPLE_RATE 8000
 #endif
 #define SAMPLE_CHUNK_SIZE 1024
-// #define SAMPLE_BUFFER_SIZE (1024 * SAMPLE_CHUNK_SIZE)
-#define SAMPLE_BUFFER_SIZE (32 * SAMPLE_CHUNK_SIZE)
+#define SAMPLE_BUFFER_SIZE (2048 * SAMPLE_CHUNK_SIZE)
+// #define SAMPLE_BUFFER_SIZE (32 * SAMPLE_CHUNK_SIZE)
 #define I2S_SCK GPIO_NUM_6
 #define I2S_WS GPIO_NUM_7
 #define I2S_DIN GPIO_NUM_3
@@ -26,7 +26,7 @@ typedef int8_t audio_sample_t;
 
 // don't mess around with this
 static const i2s_config_t i2s_config = {
-    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_TX),
     .sample_rate = SAMPLE_RATE,
 #if AUDIO_16BIT
     .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
@@ -47,7 +47,7 @@ static const i2s_config_t i2s_config = {
 static const i2s_pin_config_t i2s_pins = {
     .bck_io_num = I2S_SCK,
     .ws_io_num = I2S_WS,
-    .data_out_num = I2S_PIN_NO_CHANGE,
+    .data_out_num = I2S_DOUT,
     .data_in_num = I2S_DIN,
 };
 
@@ -57,13 +57,13 @@ static float rms_db = -99.0f;
 
 void voiceSetup()
 {
-    // pinMode(I2S_SPEAKER_ENABLE, OUTPUT);
-    // digitalWrite(I2S_SPEAKER_ENABLE, LOW);
+    pinMode(I2S_ENOUT, OUTPUT);
+    digitalWrite(I2S_ENOUT, LOW);
 
     ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL));
     ESP_ERROR_CHECK(i2s_set_pin(I2S_NUM_0, &i2s_pins));
 
-#if BOARD_HAS_PSRAM && 0
+#if BOARD_HAS_PSRAM
     if (!psramFound()) {
         printf("PSRAM not found!\n");
         delay(5000);
