@@ -5,12 +5,12 @@
 
 IRGreeAC ac(0);
 
-void onChange() {
-    static unsigned long t0;
-    unsigned long t = micros();
-    Serial.println(t - t0);
-    t0 = t;
-}
+// void onChange() {
+//     static unsigned long t0;
+//     unsigned long t = micros();
+//     Serial.println(t - t0);
+//     t0 = t;
+// }
 
 void printState() {
     Serial.println("GREE A/C remote is in the following state:");
@@ -58,7 +58,7 @@ void loop() {
     // digitalWrite(0, ledValue = 0);
     // delay(1000);
 
-    delay(2000);
+    delay(1000);
     Serial.println("Sending IR command to A/C ...");
     ac.send();
     printState();

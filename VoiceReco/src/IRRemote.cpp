@@ -90,6 +90,9 @@ String set_ac_state(JsonDocument const &arguments)
     }
 
     if (!arguments["temp"].isNull()) {
+        if (ac->getMode() == kGreeAuto) {
+            ac->setMode(kGreeCool);
+        }
         ac->setTemp(arguments["temp"]);
     }
     if (!arguments["fan"].isNull()) {
@@ -114,10 +117,14 @@ String change_ac_temp(JsonDocument const &arguments)
 {
     if (!arguments["temp_delta"].isNull()) {
         int dt = arguments["temp_delta"];
+        ac->setPower(true);
+        if (ac->getMode() == kGreeAuto) {
+            ac->setMode(kGreeCool);
+        }
         ac->setTemp(ac->getTemp() + dt);
+        ac->send();
     }
 
-    ac->send();
     return get_ac_state(arguments);
 }
 

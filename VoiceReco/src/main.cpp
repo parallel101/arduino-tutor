@@ -4,6 +4,7 @@
 #include "CloudSTT.h"
 #include "VoiceIO.h"
 #include "AIChat.h"
+#include "MemoRec.h"
 #include "IRRemote.h"
 #include "Thermometer.h"
 #include "Assistant.h"
@@ -12,17 +13,18 @@
 static int positiveCount = 0;
 static int negativeCount = 0;
 
-static const float START_THRESHOLD_DB = -55.0f;
-static const float THRESHOLD_DB = -62.0f;
+static const float START_THRESHOLD_DB = -58.0f;
+static const float THRESHOLD_DB = -65.0f;
 static const int MAX_NEGATIVE_COUNT = 7 * 1024;
 static const int MIN_POSITIVE_COUNT = 5 * 1024;
-static const int MAX_PRELOGUE_COUNT = 8 * 1024;
+static const int MAX_PRELOGUE_COUNT = 7 * 1024;
 
 static void voice_play_callback(size_t audio_bytes)
 {
     if (audio_bytes > 0) {
         printf("Playing %zu bytes...\n", audio_bytes);
         voiceSetAudioSize(audio_bytes);
+        voiceDecVolume(1);
         size_t bytes_played = voicePlayAudio();
         printf("Played %zu bytes.\n", bytes_played);
     }
@@ -107,18 +109,20 @@ void setup()
     thermoSetup();
     printf("remoteSetup...\n");
     remoteSetup();
+    printf("memoSetup...\n");
+    memoSetup();
     printf("assistantSetup...\n");
     assistantSetup();
     neopixelWrite(RGB_BUILTIN, 0, 0, 0);
     printf("setup complete.\n");
 
-    play_string("WiFi 已连接，地址：" + WiFi.localIP().toString());
+    // play_string("WiFi 已连接，地址：" + WiFi.localIP().toString());
 }
 
 
 void loop()
 {
-    int brightness = aiChatGetLevel() >= 1 ? 40 : 4;
+    int brightness = aiChatGetLevel() >= 1 ? 40 : 1;
     size_t bytes_read = voiceReadChunk();
     float rms_db = voiceRMSdB();
     // printf("%f dB\n", rms_db);

@@ -5,9 +5,9 @@
 #include <esp_timer.h>
 
 static int assistantSpeed = 5;
-static int assistantVolume = 2;
+static int assistantVolume = 4;
 static int assistantTimbre = 0;
-static int assistantTimeout = 60;
+static int assistantTimeout = 100;
 static volatile bool assistantSleep = false;
 static esp_timer_handle_t sleepTimer;
 
@@ -62,7 +62,15 @@ static String set_assistant_voice(JsonDocument const &arguments)
 
 static String set_assistant_level(JsonDocument const &arguments)
 {
-    aiChatSetLevel(arguments["level"]);
+    if (!arguments["level"].isNull()) {
+        aiChatSetLevel(arguments["level"]);
+    }
+    if (!arguments["min_level"].isNull()) {
+        int level = arguments["min_level"];
+        if (level > aiChatGetLevel()) {
+            aiChatSetLevel(level);
+        }
+    }
     return R"({"status": "OK"})";
 }
 
@@ -90,7 +98,7 @@ void assistantSetup()
         .parameters = {
             {
                 .name = "volume",
-                .descrption = "音量：0~9（初始为2）",
+                .descrption = "音量：0~9（初始为4）",
                 .type = "integer",
             },
             {
@@ -131,7 +139,7 @@ void assistantSetup()
     //     .parameters = {
     //         {
     //             .name = "timeout",
-    //             .descrption = "休眠等待时间（秒）：0~600（初始为60）",
+    //             .descrption = "休眠等待时间（秒）：0~600（初始为100）",
     //             .type = "integer",
     //         },
     //     },

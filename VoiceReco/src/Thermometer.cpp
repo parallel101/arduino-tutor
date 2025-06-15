@@ -5,7 +5,6 @@
 #define DHT_PIN GPIO_NUM_13
 
 static DHT dht;
-static bool isDHTReady = false;
 
 static String get_temperature(JsonDocument const &arguments) {
     float humidity = 0;
@@ -22,7 +21,7 @@ static String get_temperature(JsonDocument const &arguments) {
 }
 
 void thermoSetup() {
-    dht.setup(DHT_PIN);
+    dht.setup(DHT_PIN, DHT::DHT22);
     registerTool(Tool{
         .name = "get_temperature",
         .descrption = "获取房间温度和湿度",

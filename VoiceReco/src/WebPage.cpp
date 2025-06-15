@@ -16,7 +16,8 @@ static const char INDEX_HTML[] = R"(
     <hr>
     <p>指令：</p>
     <button class="exec-button">打开空调</button>
-    <button class="exec-button">空调调高</button>
+    <button class="exec-button">空调提高</button>
+    <button class="exec-button">空调降低</button>
   </body>
   <script>
     document.querySelector(".exec-button").addEventListener("click", async () => {
@@ -43,14 +44,20 @@ static TaskHandle_t webTask;
 
 static void web_server(void *)
 {
+    delay(100);
     while (true) {
         portal.handleClient();
     }
 }
 
+void webDiscoverDevices()
+{
+    // todo
+}
+
 void webSetup()
 {
-    WiFi.setTxPower(WIFI_POWER_7dBm);
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
     server.on("/", [] () {
         server.send(200, "text/html;charset=utf-8", INDEX_HTML);
     });
@@ -58,9 +65,9 @@ void webSetup()
         JsonDocument info;
         info["mac_addr"] = WiFi.macAddress();
         info["build"] = __DATE__ " " __TIME__;
-        info["product"] = "语音助手";
+        info["product"] = "assistant";
         info["name"] = NICK_NAME;
-        info["descrption"] = "中心控制器，接受用户语音输入，发送指令到从设备";
+        info["descrption"] = "语音助手，接受用户语音输入，发送指令到从设备";
         info["chip"] = "esp32-s3-devkitc-1-n16r8v";
         String infoStr;
         serializeJson(info, infoStr);
@@ -75,9 +82,10 @@ void webSetup()
     // });
 
     if (portal.begin()) {
-        Serial.printf("WiFi connected, ip=%s, gateway=%s\n",
-                      WiFi.localIP().toString().c_str(),
-                      WiFi.gatewayIP().toString().c_str());
+        printf("WiFi connected, ip=%s, gateway=%s, mask=%s\n",
+               WiFi.localIP().toString().c_str(),
+               WiFi.gatewayIP().toString().c_str(),
+               WiFi.subnetMask().toString().c_str());
     }
 
     xTaskCreate(web_server, "web_server", 10 * 1024, nullptr, 1, &webTask);

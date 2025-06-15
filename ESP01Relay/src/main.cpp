@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <AutoConnect.h>
@@ -61,6 +62,18 @@ void setup() {
         digitalWrite(0, HIGH);
         Serial.printf("turned off relay.\n");
         server.send(200, "text/plain", "OK");
+    });
+    server.on("/esp", [] () {
+        JsonDocument info;
+        info["mac_addr"] = WiFi.macAddress();
+        info["build"] = __DATE__ " " __TIME__;
+        info["product"] = "relay";
+        info["name"] = "继电器";
+        info["descrption"] = "智能插座/继电器模块，控制单个设备的开关";
+        info["chip"] = "esp01_1m";
+        String infoStr;
+        serializeJson(info, infoStr);
+        server.send(200, "text/plain", infoStr);
     });
 
     if (portal.begin()) {

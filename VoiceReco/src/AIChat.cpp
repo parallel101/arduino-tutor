@@ -220,6 +220,7 @@ static String aiChatComplete()
                 String toolCallId = response["tool_calls"][i]["id"];
                 String functionName = response["tool_calls"][i]["function"]["name"];
                 String functionArgs = response["tool_calls"][i]["function"]["arguments"];
+                printf("calling %s: %s\n", functionName.c_str(), functionArgs.c_str());
                 JsonDocument argsDoc;
                 deserializeJson(argsDoc, functionArgs);
                 int toolIndex = findTool(functionName);
@@ -277,7 +278,8 @@ String instructiveChat(String prompt)
             JsonDocument resDoc;
             deserializeJson(resDoc, tools[toolIndex].callback(argsDoc));
             bool power = resDoc["power"];
-            float temperature = resDoc["temp"];
+            String mode = resDoc["mode"];
+            int temperature = resDoc["temp"];
             int fan = resDoc["fan"];
             int sleep = resDoc["sleep"];
             int turbo = resDoc["turbo"];
@@ -286,8 +288,23 @@ String instructiveChat(String prompt)
             if (power) {
                 result += "当前温度";
                 result += temperature;
-                result += "度";
-                result += "，风速";
+                result += "度，";
+                if (mode == "auto") {
+                    result += "自动";
+                } else if (mode == "cool") {
+                    result += "制冷";
+                } else if (mode == "fan") {
+                    result += "吹风";
+                } else if (mode == "dry") {
+                    result += "干燥";
+                } else if (mode == "hot") {
+                    result += "制热";
+                } else if (mode == "econo") {
+                    result += "环保";
+                } else {
+                    result += mode;
+                }
+                result += "模式，风速";
                 if (fan == 0) {
                     result += "自动";
                 } else {
@@ -309,9 +326,19 @@ String instructiveChat(String prompt)
             return result;
         }
 
+    } else if (prompt == "时间") {
+        JsonDocument argsDoc;
+        int toolIndex = findTool("get_time");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            deserializeJson(resDoc, tools[toolIndex].callback(argsDoc));
+            String result = resDoc["time"];
+            return result;
+        }
+
     } else if (prompt == "开空调" || prompt == "关空调") {
         JsonDocument argsDoc;
-        argsDoc["power"] = prompt == "打开空调";
+        argsDoc["power"] = prompt == "开空调";
         int toolIndex = findTool("set_ac_state");
         if (toolIndex != -1) {
             JsonDocument resDoc;
@@ -361,7 +388,17 @@ String instructiveChat(String prompt)
 
     } else if (prompt == NICK_NAME || prompt == NICK_NAME_TYPO) {
         JsonDocument argsDoc;
-        argsDoc["level"] = 1;
+        argsDoc["min_level"] = 1;
+        int toolIndex = findTool("set_assistant_level");
+        if (toolIndex != -1) {
+            JsonDocument resDoc;
+            tools[toolIndex].callback(argsDoc);
+        }
+        return "怎么啦？";
+
+    } else if (prompt.startsWith(NICK_NAME)) {
+        JsonDocument argsDoc;
+        argsDoc["min_level"] = 1;
         int toolIndex = findTool("set_assistant_level");
         if (toolIndex != -1) {
             JsonDocument resDoc;
@@ -383,12 +420,11 @@ String instructiveChat(String prompt)
 
 String aiChat(String const &prompt)
 {
-    bool instructMode = aiOptions.model == nullptr;
     String instructReply = instructiveChat(prompt);
     if (!instructReply.isEmpty()) {
         return instructReply;
     }
-    if (instructMode) {
+    if (aiOptions.model == nullptr) {
         printf("instruction not understood\n");
         return "";
     }
