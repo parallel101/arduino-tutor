@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Adafruit_MPU6050.h>
+#include <Adafruit_HMC5883_U.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
 
@@ -12,7 +13,6 @@ private:
 
 public:
     struct State {
-        float K = 0;
         float P = 0;
         float x_low = 0;
     };
@@ -21,30 +21,30 @@ public:
         : K0(1 - exp((-2 * (float)M_PI) * (fc / fs)))
         , R(R)
     {
+        assert(fc < 0.5f * fs);
     }
 
     void init(State &state, float z0 = 0.0f) {
-        state.K = K0;
-        state.P = R;
+        state.P = K0 * R;
         state.x_low = z0;
     }
 
     float highPass(State &state, float z) {
         state.P += Q;
-        state.K = state.P / (state.P + R);
+        float K = state.P / (state.P + R);
         float r = z - state.x_low;
-        state.x_low += state.K * r;
-        state.P *= 1 - state.K;
+        state.x_low += K * r;
+        state.P *= 1 - K;
         float y = z - state.x_low;
         return y;
     }
 
     float lowPass(State &state, float z) {
         state.P += Q;
-        state.K = state.P / (state.P + R);
+        float K = state.P / (state.P + R);
         float r = z - state.x_low;
-        state.x_low += state.K * r;
-        state.P *= 1 - state.K;
+        state.x_low += K * r;
+        state.P *= 1 - K;
         return state.x_low;
     }
 
@@ -54,19 +54,29 @@ public:
     }
 };
 
-Kalman ka(50.0f, 4.0f, 1.0f);
-Kalman kg(50.0f, 0.5f, 1.0f);
+Kalman ka(100.0f, 3.0f, 0.1f);
+Kalman kg(100.0f, 15.0f, 0.005f);
+Kalman km(100.0f, 3.0f, 1.0f);
 Kalman::State kax, kay, kaz;
 Kalman::State kgx, kgy, kgz;
+Kalman::State kmx, kmy, kmz;
 
-Adafruit_MPU6050 mpu;
+Adafruit_MPU6050 mpu; // m/s^2 rad/s
+Adafruit_HMC5883_Unified hmc; // uT
 
 void setup()
 {
-    if (!mpu.begin()) {
-        while (1) {
-            delay(1000);
-        }
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, LOW);
+    while (!hmc.begin()) {
+        printf("Failed to start HMC\n");
+        digitalWrite(LED_BUILTIN, ~digitalRead(LED_BUILTIN));
+        delay(1000);
+    }
+    while (!mpu.begin()) {
+        printf("Failed to start MPU\n");
+        digitalWrite(LED_BUILTIN, ~digitalRead(LED_BUILTIN));
+        delay(1000);
     }
 
     //setupt motion detection
@@ -119,20 +129,27 @@ float roll_prev = 0;
 float pitch_prev = 0;
 float yaw_prev = 0;
 float t_prev = 0;
-const float alpha = 0.96;
+const float alpha = 0.98;
 
 void loop()
 {
-    sensors_event_t a, g, temp;
+    sensors_event_t a, g, temp, m;
     mpu.getEvent(&a, &g, &temp);
+    hmc.getEvent(&m);
 
     float t = a.timestamp * 0.001;
     float ax = ka.lowPass(kax, a.acceleration.x);
     float ay = ka.lowPass(kay, a.acceleration.y);
     float az = ka.lowPass(kaz, a.acceleration.z);
-    float gx = kg.highPass(kgx, g.gyro.x);
-    float gy = kg.highPass(kgy, g.gyro.y);
-    float gz = kg.highPass(kgz, g.gyro.z);
+    float gx = kg.lowPass(kgx, g.gyro.x);
+    float gy = kg.lowPass(kgy, g.gyro.y);
+    float gz = kg.lowPass(kgz, g.gyro.z);
+    float mx = km.lowPass(kmx, m.magnetic.x);
+    float my = km.lowPass(kmy, m.magnetic.y);
+    float mz = km.lowPass(kmz, m.magnetic.z);
+    mx += 46.0f;
+    my += 11.5f;
+    mz += -26.0f;
 
     // float tmp = ay;
     // ay = -ax;
@@ -140,23 +157,19 @@ void loop()
     // tmp = gy;
     // gy = -gx;
     // gx = tmp;
+    // mx = -mx;
+    // my = -my;
 
     float dt = t_prev >= t || t_prev == 0 ? 0.0f : t - t_prev;
-    float roll_acc = atan2(ay, az);
-    float pitch_acc = atan2(-ax, sqrt(ay * ay + az * az));
-    float roll = alpha * (roll_prev + gx * dt) + (1 - alpha) * roll_acc;
-    float pitch = alpha * (pitch_prev + gy * dt) + (1 - alpha) * pitch_acc;
-    float yaw = yaw_prev + gz * dt;
+    float roll = atan2(ay, az);
+    float pitch = atan2(-ax, sqrt(ay * ay + az * az));
+    float yaw = atan2(my, mx);
     roll_prev = roll;
     pitch_prev = pitch;
     yaw_prev = yaw;
     t_prev = t;
 
-    printf("gx=%f gy=%f gz=%f ax=%f ay=%f az=%f\n",
-            gx, gy, gz, ax, ay, az);
-    printf("roll_acc=%f pitch_acc=%f roll=%f pitch=%f yaw=%f\n",
-           degrees(roll_acc), degrees(pitch_acc),
-           degrees(roll), degrees(pitch), degrees(yaw));
+    printf("gx=%f gy=%f gz=%f ax=%f ay=%f az=%f mx=%f my=%f mz=%f roll=%f pitch=%f yaw=%f\n", gx, gy, gz, ax, ay, az, mx, my, mz, degrees(roll), degrees(pitch), degrees(yaw));
 
-    delay(17);
+    delay(27);
 }

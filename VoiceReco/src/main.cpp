@@ -97,14 +97,14 @@ void setup()
     neopixelWrite(RGB_BUILTIN, 20, 20, 20);
     printf("webSetup...\n");
     webSetup();
+    printf("voiceSetup...\n");
+    voiceSetup();
     printf("httpSetup...\n");
     httpSetup();
     printf("cloudSetup...\n");
     cloudSetup();
     printf("aiChatSetup...\n");
     aiChatSetup();
-    printf("voiceSetup...\n");
-    voiceSetup();
     printf("thermoSetup...\n");
     thermoSetup();
     printf("remoteSetup...\n");
