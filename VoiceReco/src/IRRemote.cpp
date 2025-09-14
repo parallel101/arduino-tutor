@@ -176,11 +176,6 @@ void remoteSetup()
                 .type = "boolean",
             },
             {
-                .name = "turbo",
-                .descrption = "强劲模式",
-                .type = "boolean",
-            },
-            {
                 .name = "light",
                 .descrption = "空调灯光",
                 .type = "boolean",

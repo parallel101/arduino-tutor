@@ -38,12 +38,12 @@ void setup() {
     ac.on();
     ac.setFan(1);
     ac.setMode(kGreeCool);
-    ac.setTemp(24);
+    ac.setTemp(26);
     ac.setSwingVertical(false, kGreeSwingAuto);
     ac.setXFan(false);
-    ac.setLight(true);
+    ac.setLight(false);
     ac.setSleep(false);
-    ac.setTurbo(false);
+    ac.setTurbo(true);
 }
 
 void loop() {
