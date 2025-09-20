@@ -1,0 +1,45 @@
+CompileFlags:
+  Remove:
+    - -mlongcalls
+    - -fno-shrink-wrap
+    - -fno-tree-switch-conversion
+    - -fstrict-volatile-bitfields
+    - -mfix-esp32-psram-cache-issue
+    - -fipa-pta
+    - -free
+    - -mtext-section-literals
+  Add:
+    - -fgnuc-version=12.3.1
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/ArduinoOTA/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/AsyncUDP/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/Ethernet/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/FFat/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/FS/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/HTTPClient/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/HTTPUpdate/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/HTTPUpdateServer/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/I2S/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/Insights/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/LittleFS/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/NetBIOS/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/RainMaker/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/SD/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/SD_MMC/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/SPIFFS/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/SimpleBLE/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/Ticker/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/USB/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/Update/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/WiFiProv/src
+    - -isystem/home/bate/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src

@@ -56,7 +56,7 @@ public:
 
 Kalman ka(100.0f, 3.0f, 0.1f);
 Kalman kg(100.0f, 15.0f, 0.005f);
-Kalman km(100.0f, 3.0f, 1.0f);
+Kalman km(100.0f, 3.0f, 0.1f);
 Kalman::State kax, kay, kaz;
 Kalman::State kgx, kgy, kgz;
 Kalman::State kmx, kmy, kmz;
@@ -70,16 +70,18 @@ void setup()
     digitalWrite(LED_BUILTIN, LOW);
     while (!hmc.begin()) {
         printf("Failed to start HMC\n");
-        digitalWrite(LED_BUILTIN, ~digitalRead(LED_BUILTIN));
+        digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
         delay(1000);
     }
     while (!mpu.begin()) {
         printf("Failed to start MPU\n");
-        digitalWrite(LED_BUILTIN, ~digitalRead(LED_BUILTIN));
+        digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
         delay(1000);
     }
 
-    //setupt motion detection
+    hmc.setMagGain(HMC5883_MAGGAIN_1_3);
+    mpu.setClock(MPU6050_INTR_8MHz);
+    mpu.setCycleRate(MPU6050_CYCLE_40_HZ);
     mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
     mpu.setMotionDetectionThreshold(1);
     mpu.setMotionDetectionDuration(20);
@@ -125,11 +127,11 @@ void setup()
     // delay(200);
 }
 
-float roll_prev = 0;
-float pitch_prev = 0;
-float yaw_prev = 0;
-float t_prev = 0;
-const float alpha = 0.98;
+// float roll_prev = 0;
+// float pitch_prev = 0;
+// float yaw_prev = 0;
+// float t_prev = 0;
+// const float alpha = 0.98;
 
 void loop()
 {
@@ -147,29 +149,31 @@ void loop()
     float mx = km.lowPass(kmx, m.magnetic.x);
     float my = km.lowPass(kmy, m.magnetic.y);
     float mz = km.lowPass(kmz, m.magnetic.z);
-    mx += 46.0f;
-    my += 11.5f;
-    mz += -26.0f;
+    // mx += 46.0f;
+    // my += 11.5f;
+    // mz += -26.0f;
 
-    // float tmp = ay;
-    // ay = -ax;
-    // ax = tmp;
-    // tmp = gy;
-    // gy = -gx;
-    // gx = tmp;
+    float tmp = ay;
+    ay = -ax;
+    ax = tmp;
+    tmp = gy;
+    gy = -gx;
+    gx = tmp;
     // mx = -mx;
     // my = -my;
 
-    float dt = t_prev >= t || t_prev == 0 ? 0.0f : t - t_prev;
-    float roll = atan2(ay, az);
-    float pitch = atan2(-ax, sqrt(ay * ay + az * az));
-    float yaw = atan2(my, mx);
-    roll_prev = roll;
-    pitch_prev = pitch;
-    yaw_prev = yaw;
-    t_prev = t;
+    // float dt = t_prev >= t || t_prev == 0 ? 0.0f : t - t_prev;
+    // float roll = -atan2(ay, az);
+    // float pitch = atan2(-ax, sqrt(ay * ay + az * az));
+    // float yaw = -atan2(my, mx);
+    // roll_prev = roll;
+    // pitch_prev = pitch;
+    // yaw_prev = yaw;
+    // t_prev = t;
 
-    printf("gx=%f gy=%f gz=%f ax=%f ay=%f az=%f mx=%f my=%f mz=%f roll=%f pitch=%f yaw=%f\n", gx, gy, gz, ax, ay, az, mx, my, mz, degrees(roll), degrees(pitch), degrees(yaw));
+    // printf("gx=%f gy=%f gz=%f ax=%f ay=%f az=%f mx=%f my=%f mz=%f roll=%f pitch=%f yaw=%f\n", gx, gy, gz, ax, ay, az, mx, my, mz, degrees(roll), degrees(pitch), degrees(yaw));
+    printf("gx=%f gy=%f gz=%f ax=%f ay=%f az=%f mx=%f my=%f mz=%f\n", gx, gy, gz, ax, ay, az, mx, my, mz);
+    // printf("roll=%f pitch=%f yaw=%f\n", degrees(roll), degrees(pitch), degrees(yaw));
 
     delay(27);
 }

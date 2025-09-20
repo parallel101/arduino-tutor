@@ -2,171 +2,245 @@ import pygame
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
+from OpenGL.GLUT import *
 import numpy as np
 from threading import Thread
 from queue import Queue, Full, Empty
 import serial
-import math
 import time
+import os
 import re
 
-class VectorVisualizer:
+class OrientationVisualizer:
+    WANTED_KEYS = {'ax', 'ay', 'az', 'mx', 'my', 'mz'}
+    WIN_SIZE = (1920, 1440)
+    WIN_TITLE = 'ESP32 Orientation'
+
     def __init__(self):
-        # Initialize pygame and OpenGL
+        os.environ['SDL_VIDEO_CENTERED'] = '1'
         pygame.init()
-        display = (800, 600)
-        pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
-        gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
-        glTranslatef(0.0, 0.0, -5)
-        
-        # Vector data queue (thread-safe)
+        pygame.display.set_mode(self.WIN_SIZE, DOUBLEBUF | OPENGL)
+        pygame.display.set_caption(self.WIN_TITLE)
+        glutInit()
+
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        gluPerspective(40.0, (self.WIN_SIZE[0] / self.WIN_SIZE[1]), 0.05, 200.0)
+        glMatrixMode(GL_MODELVIEW)
+        gluLookAt(1.0, -2.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
+        glEnable(GL_COLOR_MATERIAL)
+
+        glEnable(GL_LIGHT0)
+        glLightfv(GL_LIGHT0, GL_SPECULAR, [1, 1, 1])
+        glLightfv(GL_LIGHT0, GL_AMBIENT, [0.1, 0.1, 0.1])
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, [1, 1, 1])
+        glLightfv(GL_LIGHT0, GL_POSITION, [-2, -3, 4, 0])
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, [1, 1, 1])
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, 128)
+
         self.data_queue = Queue()
-        self.current_vector = np.array([0.0, 0.0, 0.0])
+        self.current_data = {key: 0.0 for key in self.WANTED_KEYS}
         self.running = True
-        
-        # Start data update thread
+
         self.data_thread = Thread(target=self.fetch_data_stream)
         self.data_thread.daemon = True
         self.data_thread.start()
-    
+
     def fetch_data_stream(self):
-        com = serial.Serial('/dev/ttyUSB1', 115200, timeout=1)
+        com = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
         pattern = re.compile(r'([a-zA-Z]+)=(-?\d*\.\d+)')
 
         try:
             while self.running:
-                line = com.readline().decode().strip() 
+                line = com.readline().decode().strip()
                 if not line:
                     time.sleep(0.1)
                     continue
 
                 matches = pattern.findall(line)
                 row = {key: float(value) for key, value in matches}
-
-                if 'mx' in row and 'my' in row and 'mz' in row:
-                    vector = np.array([row['mx'], row['my'], row['mz']])
-                    # vector[0] += 46.5
-                    # vector[1] += 11.5
-                    # vector[2] -= 26
-                    self.put_data(vector)
+                if all(key in row for key in self.WANTED_KEYS):
+                    self.put_data(row)
 
         except KeyboardInterrupt:
             pass
         finally:
             com.close()
 
-    def put_data(self, vector):
+    def put_data(self, data):
         try:
-            self.data_queue.put_nowait(vector)
+            self.data_queue.put_nowait(data)
         except Full:
             pass
-    
+
     def get_latest_data(self):
-        """Get the latest vector data from the queue"""
         while not self.data_queue.empty():
             try:
-                self.current_vector = self.data_queue.get_nowait()
+                self.current_data = self.data_queue.get_nowait()
             except Empty:
                 pass
-        return self.current_vector
-    
-    def draw_arrow(self, vector, color=(1.0, 0.5, 1.0)):
-        """Draw a 3D arrow representing the vector"""
-        glColor3f(*color)
+        return self.current_data
 
-        r = np.linalg.norm(vector) * 0.1
-        rz = math.degrees(math.atan2(-vector[0], vector[1]))
-        rx = math.degrees(math.atan2(vector[2], math.hypot(vector[0], vector[1]))) + 90
-        
-        # Arrow shaft (cylinder)
-        glPushMatrix()
+    def get_magnet_vector(self, data):
+        m = np.array([data['mx'], data['my'], data['mz']])
+        m += np.array([46.0, 11.5, -26.0])
+        # m = np.array([0.0, 1.0, 0.0])
+        return m
+
+    def get_gravity_vector(self, data):
+        g = np.array([data['ax'], data['ay'], data['az']])
+        return g
+
+    def compute_matrix(self, data):
+        Z = self.get_gravity_vector(data)
+        Y = self.get_magnet_vector(data)
+
+        Y -= np.dot(Y, Z) * Z
+
+        Z /= np.linalg.norm(Z) or 1
+        Y /= np.linalg.norm(Y) or 1
+
+        X = np.cross(Y, Z)
+        X /= np.linalg.norm(X) or 1
+        Y = np.cross(Z, X)
+
+        R = np.array([X, Y, Z])
+        M = np.eye(4)
+        M[:3, :3] = R.transpose()
+        return M.astype(np.float64)
+
+    def draw_arrow(self, vector):
+        r = np.linalg.norm(vector)
+
+        ax = np.array([1.0, 0.0, 0.0])
+        az = vector
+        az /= np.linalg.norm(vector) or 1
+        ay = np.cross(az, ax)
+        ay /= np.linalg.norm(ay) or 1
+        ax = np.cross(ay, az)
+
+        matrix = np.eye(4)
+        matrix[:3, :3] = np.array([ax, ay, az])
+
         quadric = gluNewQuadric()
-        glRotatef(rz, 0, 0, 1)
-        glRotatef(rx, 1, 0, 0)
-        gluCylinder(quadric, 0.02, 0.02, r * 0.9, 10, 10)
-        glPopMatrix()
-        
-        # Arrow head (cone)
+        glMatrixMode(GL_MODELVIEW)
         glPushMatrix()
-        glRotatef(rz, 0, 0, 1)
-        glRotatef(rx, 1, 0, 0)
+        glMultMatrixd(matrix)
+        gluCylinder(quadric, 0.02, 0.02, r * 0.9, 10, 10)
         glTranslatef(0, 0, r * 0.9)
         gluCylinder(quadric, 0.05, 0.0, r * 0.1, 10, 10)
         glPopMatrix()
-        
         gluDeleteQuadric(quadric)
+
+    def draw_teapot(self, matrix, size):
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glMultMatrixd(matrix)
+        glRotatef(90, 1, 0, 0)
+        glutSolidTeapot(size)
+        glPopMatrix()
     
     def draw_axes(self):
-        """Draw reference axes"""
+        glDisable(GL_LIGHTING)
         glBegin(GL_LINES)
-        # X axis (red)
         glColor3f(1.0, 0.0, 0.0)
         glVertex3f(0, 0, 0)
         glVertex3f(1, 0, 0)
-        # Y axis (green)
         glColor3f(0.0, 1.0, 0.0)
         glVertex3f(0, 0, 0)
         glVertex3f(0, 1, 0)
-        # Z axis (blue)
         glColor3f(0.0, 0.0, 1.0)
         glVertex3f(0, 0, 0)
         glVertex3f(0, 0, 1)
         glEnd()
-        
-        # Add labels
+
         self.render_text("X", 1.1, 0, 0)
         self.render_text("Y", 0, 1.1, 0)
         self.render_text("Z", 0, 0, 1.1)
-    
+        glEnable(GL_LIGHTING)
+
     def render_text(self, text, x, y, z):
-        """Render text at 3D position"""
-        font = pygame.font.SysFont('Arial', 20)
+        glDisable(GL_LIGHTING)
+        glDisable(GL_DEPTH_TEST)
+        font = pygame.font.SysFont('Arial', 24)
         text_surface = font.render(text, True, (255, 255, 255, 255), (0, 0, 0, 0))
         text_data = pygame.image.tostring(text_surface, "RGBA", True)
-        
+
         glRasterPos3d(x, y, z)
-        glDrawPixels(text_surface.get_width(), text_surface.get_height(), 
-                    GL_RGBA, GL_UNSIGNED_BYTE, text_data)
+        glDrawPixels(text_surface.get_width(), text_surface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, text_data)
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
     
     def run(self):
-        """Main rendering loop"""
         while True:
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     self.running = False
                     pygame.quit()
                     return
-            
-            # Handle rotation with mouse
+
+            pressed = pygame.key.get_pressed()
+            if pressed[pygame.K_a]:
+                glTranslatef(0.02, 0, 0)
+            if pressed[pygame.K_d]:
+                glTranslatef(-0.02, 0, 0)
+            if pressed[pygame.K_w]:
+                glTranslatef(0, -0.02, 0)
+            if pressed[pygame.K_s]:
+                glTranslatef(0, 0.02, 0)
+            if pressed[pygame.K_q]:
+                glTranslatef(0, 0, -0.02)
+            if pressed[pygame.K_e]:
+                glTranslatef(0, 0, 0.02)
+
             if pygame.mouse.get_pressed()[0]:
                 rel = pygame.mouse.get_rel()
-                glRotatef(rel[0], 0, 1, 0)
-                glRotatef(rel[1], 1, 0, 0)
+                glRotatef(rel[0] * 0.5, 0, 0, 1)
+                glRotatef(rel[1] * 0.5, 1, 0, 0)
             else:
-                pygame.mouse.get_rel()  # Reset relative motion
-            
-            # Clear screen
-            glClear(GL_COLOR_BUFFER_BIT)
-            
-            # Get latest vector data
-            vector = self.get_latest_data()
-            
-            # Draw reference axes
+                pygame.mouse.get_rel()
+
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) # type: ignore
+
+            data = self.get_latest_data()
+            magnet = self.get_magnet_vector(data)
+            gravity = self.get_gravity_vector(data)
+            matrix = self.compute_matrix(data)
+
+            magnet = matrix[:3, :3].transpose() @ magnet
+            gravity = matrix[:3, :3].transpose() @ gravity
+
             self.draw_axes()
-            
-            # Draw the current vector
-            self.draw_arrow(vector)
-            
-            # Display vector values
+            glColor3f(1.0, 0.75, 0.5)
+            self.draw_teapot(matrix, 0.5)
+            glColor3f(0.8, 0.4, 0.9)
+            self.draw_arrow(magnet / 50.0)
+            glColor3f(1.0, 0.5, 0.0)
+            self.draw_arrow(gravity / 10.0)
+
             glColor3f(1.0, 1.0, 1.0)
-            self.render_text(f"X: {vector[0]:.3f}", -1.5, 1.5, 0)
-            self.render_text(f"Y: {vector[1]:.3f}", -1.5, 1.3, 0)
-            self.render_text(f"Z: {vector[2]:.3f}", -1.5, 1.1, 0)
-            self.render_text(f"Magnitude: {np.linalg.norm(vector):.3f}", -1.5, 0.9, 0)
-            
+            glMatrixMode(GL_MODELVIEW)
+            glPushMatrix()
+            glLoadIdentity()
+            glMatrixMode(GL_PROJECTION)
+            glPushMatrix()
+            glLoadIdentity()
+            self.render_text(f"ax: {data['ax']:.3f}", -0.75, 0.75, 0)
+            self.render_text(f"ay: {data['ay']:.3f}", -0.75, 0.7, 0)
+            self.render_text(f"az: {data['az']:.3f}", -0.75, 0.65, 0)
+            self.render_text(f"mx: {data['mx']:.3f}", -0.75, 0.6, 0)
+            self.render_text(f"my: {data['my']:.3f}", -0.75, 0.55, 0)
+            self.render_text(f"mz: {data['mz']:.3f}", -0.75, 0.5, 0)
+            glMatrixMode(GL_PROJECTION)
+            glPopMatrix()
+            glMatrixMode(GL_MODELVIEW)
+            glPopMatrix()
+
             pygame.display.flip()
             pygame.time.wait(10)
 
 if __name__ == "__main__":
-    visualizer = VectorVisualizer()
+    visualizer = OrientationVisualizer()
     visualizer.run()
