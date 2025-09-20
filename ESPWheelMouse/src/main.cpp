@@ -1,24 +1,23 @@
 #include <Arduino.h>
-// #include <BleMouse.h>
+#include <BleMouse.h>
 #include <esp_sleep.h>
 #include "BatteryPercent.h"
 
-// BleMouse bleMouse("ESPMouse", "Espressif", 100);
+BleMouse bleMouse("ESPMouse", "Espressif", 100);
 
 const int CLK = 2;
 const int DT = 3;
 const int PWR = A0;
 
-bool connected = false;
-int idle = 0;
+volatile bool connected = false;
 volatile bool changed = false;
 
 
 void IRAM_ATTR onBatteryUpdate()
 {
-    int percent = batteryVoltageToPercentage(analogReadMilliVolts(PWR) * 10);
+    int percent = batteryVoltageToPercentage(analogReadMilliVolts(PWR) * 11);
     if (connected) {
-        // bleMouse.setBatteryLevel(percent);
+        bleMouse.setBatteryLevel(percent);
     }
 }
 
@@ -36,11 +35,11 @@ void IRAM_ATTR onClkRise()
     } else {
         direction = -1;
     }
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    // digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
 
-    // if (connected) {
-        // bleMouse.move(0, 0, direction, 0);
-    // }
+    if (connected) {
+        bleMouse.move(0, 0, direction, 0);
+    }
 
     changed = true;
 }
@@ -53,11 +52,11 @@ void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);
 
-    // bleMouse.begin();
+    bleMouse.begin();
 
     hw_timer_t *batteryTimer = timerBegin(1, 80, true);
     timerAttachInterrupt(batteryTimer, onBatteryUpdate, false);
-    timerAlarmWrite(batteryTimer, 5'000'000, true);
+    timerAlarmWrite(batteryTimer, 10'000'000, true);
     timerAlarmEnable(batteryTimer);
 
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
@@ -67,17 +66,22 @@ void setup() {
 }
 
 void loop() {
-    // if (!connected) {
-    //     if (!bleMouse.isConnected()) {
-    //         digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    //         Serial.println("connecting...");
-    //         delay(500);
-    //         return;
-    //     } else {
-    //         connected = true;
-    //         digitalWrite(LED_BUILTIN, LOW);
-    //     }
-    // }
+    static int idle = 0;
+
+    if (!connected) {
+        if (!bleMouse.isConnected()) {
+            digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+            delay(500);
+            return;
+        } else {
+            connected = true;
+            digitalWrite(LED_BUILTIN, LOW);
+        }
+    }
+    if (!bleMouse.isConnected()) {
+        connected = false;
+        return;
+    }
 
     delay(1000);
 
@@ -88,7 +92,7 @@ void loop() {
         ++idle;
     }
 
-    if (idle > 5) {
+    if (idle > 60) {
         esp_deep_sleep_enable_gpio_wakeup(BIT(CLK),
                                           digitalRead(CLK) ?
                                           ESP_GPIO_WAKEUP_GPIO_LOW :
