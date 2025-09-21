@@ -1,4 +1,5 @@
 import pygame
+from pyquaternion import Quaternion
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
@@ -16,7 +17,7 @@ MAG_CALIB = '''
 '''
 
 class OrientationVisualizer:
-    WANTED_KEYS = {'ax', 'ay', 'az', 'mx', 'my', 'mz'}
+    WANTED_KEYS = {'t', 'ax', 'ay', 'az', 'gx', 'gy', 'gz', 'mx', 'my', 'mz'}
     WIN_SIZE = (1920, 1440)
     WIN_TITLE = 'ESP32 Orientation'
 
@@ -45,7 +46,9 @@ class OrientationVisualizer:
         glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, 128)
 
         self.data_queue = Queue()
-        self.current_data = {key: 0.0 for key in self.WANTED_KEYS}
+        self.current_data = None
+        self.last_magnet = None
+        self.accumulated_magnet = None
         self.running = True
 
         self.data_thread = Thread(target=self.fetch_data_stream)
@@ -89,24 +92,41 @@ class OrientationVisualizer:
 
     def get_magnet_vector(self, data):
         m = np.array([data['mx'], data['my'], data['mz']])
-        mag_calib = [float(x) for x in MAG_CALIB.strip().split()]
-        m -= (np.array(mag_calib[0:3]) + np.array(mag_calib[3:6])) / 2.0
-        print((np.array(mag_calib[0:3]) + np.array(mag_calib[3:6])) / 2.0)
-        # m += np.array([46.0, 11.5, -26.0])
-        # m = np.array([0.0, 1.0, 0.0])
         return m
 
-    def get_gravity_vector(self, data):
-        g = np.array([data['ax'], data['ay'], data['az']])
+    def get_filtered_magnet_vector(self, data):
+        m = self.get_magnet_vector(data)
+        if self.last_magnet is not None:
+            delta_magnet = m - self.last_magnet
+            delta_magnet /= (np.linalg.norm(self.last_magnet + m) / 2) or 1
+            assert self.accumulated_magnet is not None
+            self.accumulated_magnet += delta_magnet
+        else:
+            self.accumulated_magnet = m
+
+        norm_magnet = np.linalg.norm(self.accumulated_magnet)
+        if norm_magnet == 0:
+            self.accumulated_magnet = m
+        self.accumulated_magnet /= norm_magnet or 1
+        self.accumulated_magnet[np.isnan(self.accumulated_magnet) | np.isinf(self.accumulated_magnet)] = 0
+
+        self.last_magnet = m
+        return self.accumulated_magnet * np.linalg.norm(m)
+
+    def get_accel_vector(self, data):
+        a = np.array([data['ax'], data['ay'], data['az']])
+        return a
+
+    def get_gyro_vector(self, data):
+        g = np.array([data['gx'], data['gy'], data['gz']])
         return g
 
-    def compute_matrix(self, data):
-        Z = self.get_gravity_vector(data)
-        Y = self.get_magnet_vector(data)
-
-        Y -= np.dot(Y, Z) * Z
+    def compute_rotation(self, accel, magnet):
+        Z = np.array(accel)
+        Y = np.array(magnet)
 
         Z /= np.linalg.norm(Z) or 1
+        # Y -= np.dot(Y, Z) * Z
         Y /= np.linalg.norm(Y) or 1
 
         X = np.cross(Y, Z)
@@ -114,9 +134,7 @@ class OrientationVisualizer:
         Y = np.cross(Z, X)
 
         R = np.array([X, Y, Z])
-        M = np.eye(4)
-        M[:3, :3] = R.transpose()
-        return M.astype(np.float64)
+        return Quaternion(matrix=R)
 
     def draw_arrow(self, vector):
         r = np.linalg.norm(vector)
@@ -144,7 +162,7 @@ class OrientationVisualizer:
     def draw_teapot(self, matrix, size):
         glMatrixMode(GL_MODELVIEW)
         glPushMatrix()
-        glMultMatrixd(matrix)
+        glMultMatrixd(np.array(matrix).astype(np.float64))
         glRotatef(90, 1, 0, 0)
         glutSolidTeapot(size)
         glPopMatrix()
@@ -222,40 +240,48 @@ class OrientationVisualizer:
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) # type: ignore
 
             data = self.get_latest_data()
-            magnet = self.get_magnet_vector(data)
-            gravity = self.get_gravity_vector(data)
-            matrix = self.compute_matrix(data)
+            if data:
+                magnet = self.get_magnet_vector(data)
+                accel = self.get_accel_vector(data)
+                gyro = self.get_gyro_vector(data)
+                rotation = self.compute_rotation(accel, magnet)
 
-            magnet = matrix[:3, :3].transpose() @ magnet
-            gravity = matrix[:3, :3].transpose() @ gravity
+                magnet = rotation.rotation_matrix.T @ magnet
+                accel = rotation.rotation_matrix.T @ accel
+                gyro = rotation.rotation_matrix.T @ gyro
 
-            self.draw_axes()
-            glColor3f(1.0, 0.75, 0.5)
-            self.draw_teapot(matrix, 0.5)
-            glColor3f(0.8, 0.4, 0.9)
-            self.draw_arrow(magnet / 30.0)
-            glColor3f(1.0, 0.5, 0.0)
-            self.draw_arrow(gravity / 10.0)
+                self.draw_axes()
+                glColor3f(1.0, 0.75, 0.5)
+                self.draw_teapot(rotation.transformation_matrix.T, 0.5)
+                glColor3f(0.8, 0.4, 0.9)
+                self.draw_arrow(magnet / 30.0)
+                glColor3f(1.0, 0.5, 0.0)
+                self.draw_arrow(accel / 10.0)
+                glColor3f(0.2, 0.9, 0.0)
+                self.draw_arrow(gyro / 1.0)
 
-            glColor3f(1.0, 1.0, 1.0)
-            self.render_text(f"ax: {data['ax']:.3f}", -0.75, 0.75, 0)
-            self.render_text(f"ay: {data['ay']:.3f}", -0.75, 0.7, 0)
-            self.render_text(f"az: {data['az']:.3f}", -0.75, 0.65, 0)
-            self.render_text(f"mx: {data['mx']:.3f}", -0.75, 0.6, 0)
-            self.render_text(f"my: {data['my']:.3f}", -0.75, 0.55, 0)
-            self.render_text(f"mz: {data['mz']:.3f}", -0.75, 0.5, 0)
+                glColor3f(1.0, 1.0, 1.0)
+                self.render_text(f"t: {data['t']:.3f}", -0.75, 0.8, 0)
+                self.render_text(f"ax: {data['ax']:.3f}", -0.75, 0.75, 0)
+                self.render_text(f"ay: {data['ay']:.3f}", -0.75, 0.7, 0)
+                self.render_text(f"az: {data['az']:.3f}", -0.75, 0.65, 0)
+                self.render_text(f"mx: {data['mx']:.3f}", -0.75, 0.6, 0)
+                self.render_text(f"my: {data['my']:.3f}", -0.75, 0.55, 0)
+                self.render_text(f"mz: {data['mz']:.3f}", -0.75, 0.5, 0)
+                self.render_text(f"gx: {data['gx']:.3f}", -0.75, 0.45, 0)
+                self.render_text(f"gy: {data['gy']:.3f}", -0.75, 0.4, 0)
+                self.render_text(f"gz: {data['gz']:.3f}", -0.75, 0.35, 0)
 
             pygame.display.flip()
             pygame.time.wait(10)
 
-    def calibrate(self):
+    def calibrate_magnet(self):
         minx, miny, minz = 999.0, 999.0, 999.0
         maxx, maxy, maxz = -999.0, -999.0, -999.0
 
         while True:
             data = self.get_latest_data()
-
-            if data['mx'] or data['my'] or data['mz']:
+            if data:
                 minx = min(minx, data['mx'])
                 miny = min(miny, data['my'])
                 minz = min(minz, data['mz'])
