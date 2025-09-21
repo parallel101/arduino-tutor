@@ -11,6 +11,10 @@ import time
 import os
 import re
 
+MAG_CALIB = '''
+-71.790718 -52.549339 18.06226 10.764116 41.272274 104.961983
+'''
+
 class OrientationVisualizer:
     WANTED_KEYS = {'ax', 'ay', 'az', 'mx', 'my', 'mz'}
     WIN_SIZE = (1920, 1440)
@@ -85,7 +89,10 @@ class OrientationVisualizer:
 
     def get_magnet_vector(self, data):
         m = np.array([data['mx'], data['my'], data['mz']])
-        m += np.array([46.0, 11.5, -26.0])
+        mag_calib = [float(x) for x in MAG_CALIB.strip().split()]
+        m -= (np.array(mag_calib[0:3]) + np.array(mag_calib[3:6])) / 2.0
+        print((np.array(mag_calib[0:3]) + np.array(mag_calib[3:6])) / 2.0)
+        # m += np.array([46.0, 11.5, -26.0])
         # m = np.array([0.0, 1.0, 0.0])
         return m
 
@@ -162,6 +169,12 @@ class OrientationVisualizer:
         glEnable(GL_LIGHTING)
 
     def render_text(self, text, x, y, z):
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
         glDisable(GL_LIGHTING)
         glDisable(GL_DEPTH_TEST)
         font = pygame.font.SysFont('Arial', 24)
@@ -172,7 +185,11 @@ class OrientationVisualizer:
         glDrawPixels(text_surface.get_width(), text_surface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, text_data)
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_LIGHTING)
-    
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+
     def run(self):
         while True:
             for event in pygame.event.get():
@@ -216,30 +233,38 @@ class OrientationVisualizer:
             glColor3f(1.0, 0.75, 0.5)
             self.draw_teapot(matrix, 0.5)
             glColor3f(0.8, 0.4, 0.9)
-            self.draw_arrow(magnet / 50.0)
+            self.draw_arrow(magnet / 30.0)
             glColor3f(1.0, 0.5, 0.0)
             self.draw_arrow(gravity / 10.0)
 
             glColor3f(1.0, 1.0, 1.0)
-            glMatrixMode(GL_MODELVIEW)
-            glPushMatrix()
-            glLoadIdentity()
-            glMatrixMode(GL_PROJECTION)
-            glPushMatrix()
-            glLoadIdentity()
             self.render_text(f"ax: {data['ax']:.3f}", -0.75, 0.75, 0)
             self.render_text(f"ay: {data['ay']:.3f}", -0.75, 0.7, 0)
             self.render_text(f"az: {data['az']:.3f}", -0.75, 0.65, 0)
             self.render_text(f"mx: {data['mx']:.3f}", -0.75, 0.6, 0)
             self.render_text(f"my: {data['my']:.3f}", -0.75, 0.55, 0)
             self.render_text(f"mz: {data['mz']:.3f}", -0.75, 0.5, 0)
-            glMatrixMode(GL_PROJECTION)
-            glPopMatrix()
-            glMatrixMode(GL_MODELVIEW)
-            glPopMatrix()
 
             pygame.display.flip()
             pygame.time.wait(10)
+
+    def calibrate(self):
+        minx, miny, minz = 999.0, 999.0, 999.0
+        maxx, maxy, maxz = -999.0, -999.0, -999.0
+
+        while True:
+            data = self.get_latest_data()
+
+            if data['mx'] or data['my'] or data['mz']:
+                minx = min(minx, data['mx'])
+                miny = min(miny, data['my'])
+                minz = min(minz, data['mz'])
+                maxx = max(maxx, data['mx'])
+                maxy = max(maxy, data['my'])
+                maxz = max(maxz, data['mz'])
+                print(minx, miny, minz, maxx, maxy, maxz)
+
+            time.sleep(0.05)
 
 if __name__ == "__main__":
     visualizer = OrientationVisualizer()
