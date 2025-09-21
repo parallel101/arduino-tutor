@@ -12,16 +12,8 @@ import time
 import os
 import re
 
-MAG_CALIB = '''
--71.790718 -52.549339 18.06226 10.764116 41.272274 104.961983
-'''
-
-GYRO_CALIB = '''
--0.0069489381355932 0.05041757500000004 -0.014242213135593205
-'''
-
 class OrientationVisualizer:
-    WANTED_KEYS = {'t', 'ax', 'ay', 'az', 'gx', 'gy', 'gz', 'mx', 'my', 'mz'}
+    WANTED_KEYS = {'t', 'qx', 'qy', 'qz'}
     WIN_SIZE = (1920, 1440)
     WIN_TITLE = 'ESP32 Orientation'
 
@@ -93,49 +85,6 @@ class OrientationVisualizer:
             except Empty:
                 pass
         return self.current_data
-
-    def get_timestamp(self, data):
-        t = data['t']
-        return t
-
-    def get_magnet_vector(self, data):
-        m = np.array([data['mx'], data['my'], data['mz']])
-        return m
-
-    def get_accel_vector(self, data):
-        a = np.array([data['ax'], data['ay'], data['az']])
-        return a
-
-    def get_gyro_vector(self, data):
-        g = np.array([data['gx'], data['gy'], data['gz']])
-        return g
-
-    def compute_rotation(self, t, accel, magnet, gyro):
-        Z = np.array(accel)
-        Y = np.array(magnet)
-
-        Z /= np.linalg.norm(Z) or 1
-        Y /= np.linalg.norm(Y) or 1
-
-        X = np.cross(Y, Z)
-        X /= np.linalg.norm(X) or 1
-        Y = np.cross(Z, X)
-
-        static_rotation = Quaternion(matrix=np.array([X, Y, Z]))
-
-        if self.current_time is None:
-            dt = 0
-        else:
-            dt = t - self.current_time
-        self.current_time = t
-
-        if self.current_rotation is None:
-            self.current_rotation = static_rotation
-
-        self.current_rotation.integrate(gyro, dt)
-        self.current_rotation = Quaternion.slerp(self.current_rotation, static_rotation, 0.05)
-
-        return self.current_rotation
 
     def draw_arrow(self, vector):
         r = np.linalg.norm(vector)
@@ -242,72 +191,21 @@ class OrientationVisualizer:
 
             data = self.get_latest_data()
             if data:
-                t = self.get_timestamp(data)
-                accel = self.get_accel_vector(data)
-                magnet = self.get_magnet_vector(data)
-                gyro = self.get_gyro_vector(data)
-                rotation = self.compute_rotation(t, accel, magnet, gyro)
-
-                magnet = rotation.rotation_matrix.T @ magnet
-                accel = rotation.rotation_matrix.T @ accel
-                gyro = rotation.rotation_matrix.T @ gyro
+                rotation = Quaternion([data['qw'], data['qx'], data['qy'], data['qz']])
 
                 self.draw_axes()
                 glColor3f(1.0, 0.75, 0.5)
                 self.draw_teapot(rotation.transformation_matrix.T, 0.5)
-                glColor3f(0.8, 0.4, 0.9)
-                self.draw_arrow(magnet / 30.0)
-                glColor3f(1.0, 0.5, 0.0)
-                self.draw_arrow(accel / 10.0)
-                glColor3f(0.2, 0.9, 0.0)
-                self.draw_arrow(gyro / 1.0)
 
                 glColor3f(1.0, 1.0, 1.0)
                 self.render_text(f"t: {data['t']:.3f}", -0.75, 0.8, 0)
-                self.render_text(f"ax: {data['ax']:.3f}", -0.75, 0.75, 0)
-                self.render_text(f"ay: {data['ay']:.3f}", -0.75, 0.7, 0)
-                self.render_text(f"az: {data['az']:.3f}", -0.75, 0.65, 0)
-                self.render_text(f"mx: {data['mx']:.3f}", -0.75, 0.6, 0)
-                self.render_text(f"my: {data['my']:.3f}", -0.75, 0.55, 0)
-                self.render_text(f"mz: {data['mz']:.3f}", -0.75, 0.5, 0)
-                self.render_text(f"gx: {data['gx']:.3f}", -0.75, 0.45, 0)
-                self.render_text(f"gy: {data['gy']:.3f}", -0.75, 0.4, 0)
-                self.render_text(f"gz: {data['gz']:.3f}", -0.75, 0.35, 0)
+                self.render_text(f"qw: {data['qw']:.3f}", -0.75, 0.6, 0)
+                self.render_text(f"qx: {data['qx']:.3f}", -0.75, 0.75, 0)
+                self.render_text(f"qy: {data['qy']:.3f}", -0.75, 0.7, 0)
+                self.render_text(f"qz: {data['qz']:.3f}", -0.75, 0.65, 0)
 
             pygame.display.flip()
             pygame.time.wait(10)
-
-    def calibrate_magnet(self):
-        minx, miny, minz = 999.0, 999.0, 999.0
-        maxx, maxy, maxz = -999.0, -999.0, -999.0
-
-        while True:
-            data = self.get_latest_data()
-            if data:
-                minx = min(minx, data['mx'])
-                miny = min(miny, data['my'])
-                minz = min(minz, data['mz'])
-                maxx = max(maxx, data['mx'])
-                maxy = max(maxy, data['my'])
-                maxz = max(maxz, data['mz'])
-                print(minx, miny, minz, maxx, maxy, maxz)
-
-            time.sleep(0.01)
-
-    def calibrate_gyro(self):
-        sumx, sumy, sumz = 0.0, 0.0, 0.0
-        count = 0
-
-        while True:
-            data = self.get_latest_data()
-            if data:
-                sumx += data['gx']
-                sumy += data['gy']
-                sumz += data['gz']
-                count += 1
-                print(sumx / count, sumy / count, sumz / count)
-
-            time.sleep(0.01)
 
 if __name__ == "__main__":
     visualizer = OrientationVisualizer()
